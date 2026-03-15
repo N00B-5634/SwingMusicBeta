@@ -7,19 +7,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Build App
+      - name: Select Xcode Version
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Build Archive
         run: |
-          # Compile the project as an unsigned archive
           xcodebuild archive \
+            -project SwingMusicApp.xcodeproj \
             -scheme SwingMusicApp \
             -destination "generic/platform=iOS" \
             -archivePath ./build/SwingMusicApp.xcarchive \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
-      - name: Package .app into .ipa
+      - name: Export .app to .ipa
         run: |
           mkdir -p Payload
+          # Copy the .app from the archive into the Payload folder
           cp -r ./build/SwingMusicApp.xcarchive/Products/Applications/*.app ./Payload/
+          # Zip it up into an IPA
           zip -r SwingMusicApp.ipa Payload
 
       - name: Upload Artifacts
