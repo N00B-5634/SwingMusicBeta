@@ -299,7 +299,7 @@
 			knownRegions = (en, Base,);
 			mainGroup = 1A000050;
 			packageReferences = (1A000091 /* XCRemoteSwiftPackageReference "Kingfisher" */,);
-			productRefGroup = 1A000040 /* Products */,
+			productRefGroup = 1A000040 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (1A000080 /* SwingMusicApp */,);
