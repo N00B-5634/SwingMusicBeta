@@ -122,6 +122,8 @@
 		1A000029 /* Info.plist */           = {isa = PBXFileReference; lastKnownFileType = text.plist.xml;   path = Info.plist;           sourceTree = "<group>"; };
 		1A000031 /* Assets.xcassets */     = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets;      sourceTree = "<group>"; };
 		1A000030 /* SwingMusicApp.app */    = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwingMusicApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A000032 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		1A000033 /* Vision.framework */       = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework;       path = System/Library/Frameworks/Vision.framework;       sourceTree = SDKROOT; };
 		1A000031 /* Assets.xcassets */      = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 
 /* ---- Groups ---- */
@@ -189,6 +191,15 @@
 			path = UIComponents;
 			sourceTree = "<group>";
 		};
+		1A000035 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1A000032 /* AVFoundation.framework */,
+				1A000033 /* Vision.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		1A000050 /* SwingMusicBeta */ = {
 			isa = PBXGroup;
 			children = (
@@ -198,6 +209,7 @@
 				1A000044 /* Auth */,
 				1A000046 /* Features */,
 				1A000049 /* UIComponents */,
+				1A000035 /* Frameworks */,
 				1A000040 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -215,6 +227,8 @@
 		1A000077 /* Components.swift in Sources */     = {isa = PBXBuildFile; fileRef = 1A000027; };
 		1A000078 /* ATSWarning.swift in Sources */     = {isa = PBXBuildFile; fileRef = 1A000028; };
 		1A000079 /* Assets.xcassets in Resources */    = {isa = PBXBuildFile; fileRef = 1A000031; };
+		1A000081 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1A000032; };
+		1A000082 /* Vision.framework in Frameworks */       = {isa = PBXBuildFile; fileRef = 1A000033; };
 
 /* ---- Build phases ---- */
 		1A000060 /* Sources */ = {
@@ -244,7 +258,10 @@
 		1A000062 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+				1A000081 /* AVFoundation.framework in Frameworks */,
+				1A000082 /* Vision.framework in Frameworks */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 

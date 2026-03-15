@@ -641,112 +641,274 @@ struct SettingsView: View {
 }
 
 // MARK: - Server Pairing
+// Flow:
+//   1. Enter URL → probe BASE_URL/auth/users
+//   2a. usersOnLogin=true → show user picker + password
+//   2b. enableGuest=true, usersOnLogin=false → auto guest login
+//   2c. Single user → pre-fill username, show password only
+//   QR → scan → GET BASE_URL/auth/pair?code=XXX
 struct ServerPairingView: View {
     @EnvironmentObject var auth: AuthState
-    @State private var serverURL = ""
-    @State private var username  = ""
-    @State private var password  = ""
-    @State private var showPass  = false
-    @State private var isLoading = false
-    @State private var error: String?
-    @State private var showATS   = false
-    @State private var showQR    = false
-    @State private var mode: Mode = .qr
-
-    enum Mode { case qr, password }
+    @State private var serverURL  = ""
+    @State private var username   = ""
+    @State private var password   = ""
+    @State private var showPass   = false
+    @State private var loginError: String?
+    @State private var isLoggingIn = false
+    @State private var showATS    = false
+    @State private var showQR     = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 28) {
-                    VStack(spacing: 8) {
-                        ZStack {
-                            Circle().fill(Color.swingPrimary.opacity(0.12)).frame(width: 80, height: 80)
-                            // SwingLogo is in App/Assets.xcassets/SwingLogo.imageset/
-                            // Drop your PNG there. Falls back to SF symbol if not present.
-                            if let _ = UIImage(named: "SwingLogo") {
-                                Image("SwingLogo")
-                                    .resizable().scaledToFit()
-                                    .frame(width: 52, height: 52)
-                            } else {
-                                Image(systemName: "music.note.house.fill")
-                                    .font(.system(size: 36))
-                                    .foregroundStyle(Color.swingPrimary)
-                            }
-                        }
-                        Text("Swing Music").font(SwingType.headlineMedium)
-                        Text("Connect to your server").font(SwingType.bodyMedium).foregroundStyle(.secondary)
+                VStack(spacing: 24) {
+                    logoHeader
+                    if let probe = auth.probeResult {
+                        probedView(probe: probe)
+                    } else {
+                        urlEntryView
                     }
-                    .padding(.top, 20)
-
-                    Picker("Mode", selection: $mode) {
-                        Text("QR Code").tag(Mode.qr)
-                        Text("Username").tag(Mode.password)
-                    }
-                    .pickerStyle(.segmented).padding(.horizontal)
-
-                    if mode == .qr { qrSection } else { passwordSection }
-                    tips
                 }
                 .padding(.horizontal, 20).padding(.bottom, 40)
             }
+            .navigationBarHidden(true)
         }
         .sheet(isPresented: $showATS) {
             ATSWarningSheet(
-                onConfirm: { auth.enableInsecureHTTP(true); showATS = false; Task { await doLogin() } },
-                onCancel:  { serverURL = serverURL.replacingOccurrences(of: "http://", with: "https://",
-                              options: .caseInsensitive); showATS = false }
+                onConfirm: {
+                    auth.enableInsecureHTTP(true)
+                    showATS = false
+                    Task { await auth.probe(rawURL: serverURL) }
+                },
+                onCancel: {
+                    serverURL = serverURL
+                        .replacingOccurrences(of: "http://", with: "https://",
+                                              options: .caseInsensitive)
+                    showATS = false
+                }
             )
         }
         .sheet(isPresented: $showQR) {
-            QRScanSheet { code in showQR = false; handleQR(code) }
-        }
-    }
-
-    private var qrSection: some View {
-        VStack(spacing: 12) {
-            Button { showQR = true } label: {
-                VStack(spacing: 12) {
-                    Image(systemName: "qrcode.viewfinder")
-                        .font(.system(size: 48))
-                        .foregroundStyle(Color.swingPrimary)       // explicit Color. prefix
-                    Text("Scan QR code").font(SwingType.titleMedium)
-                    Text("Settings > Pair device in the web client")
-                        .font(SwingType.bodySmall).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            QRScanSheet { scanned in
+                showQR = false
+                Task {
+                    isLoggingIn = true; loginError = nil
+                    loginError = await auth.loginWithQR(scannedURL: scanned)
+                    isLoggingIn = false
                 }
-                .frame(maxWidth: .infinity).padding(24)
-                .background(Color.secondary.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color.swingPrimary.opacity(0.3)))  // explicit Color. prefix
             }
-            .buttonStyle(.plain)
-            if isLoading { ProgressView("Authenticating…") }
-            if let e = error { Text(e).font(SwingType.labelSmall).foregroundStyle(.red).multilineTextAlignment(.center) }
         }
     }
 
-    private var passwordSection: some View {
-        VStack(spacing: 14) {
+    // MARK: Logo
+    private var logoHeader: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle().fill(Color.swingPrimary.opacity(0.12)).frame(width: 80, height: 80)
+                if UIImage(named: "SwingLogo") != nil {
+                    Image("SwingLogo").resizable().scaledToFit().frame(width: 52, height: 52)
+                } else {
+                    Image(systemName: "music.note.house.fill")
+                        .font(.system(size: 36)).foregroundStyle(Color.swingPrimary)
+                }
+            }
+            Text("Swing Music").font(SwingType.headlineMedium)
+            Text("Connect to your server").font(SwingType.bodyMedium).foregroundStyle(.secondary)
+        }
+        .padding(.top, 20)
+    }
+
+    // MARK: Step 1 — URL entry + QR button
+    private var urlEntryView: some View {
+        VStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Server URL").font(SwingType.labelMedium).foregroundStyle(.secondary)
                     Spacer()
-                    if serverURL.lowercased().hasPrefix("http://") && !serverURL.lowercased().hasPrefix("https://") {
-                        InsecureBadge()
-                    }
+                    if serverURL.lowercased().hasPrefix("http://") &&
+                       !serverURL.lowercased().hasPrefix("https://") { InsecureBadge() }
                 }
                 TextField("https://music.example.com", text: $serverURL)
                     .textFieldStyle(.roundedBorder).keyboardType(.URL)
                     .autocorrectionDisabled().textInputAutocapitalization(.never)
-                Text("Works with any HTTPS endpoint — Cloudflare Tunnel, nginx, Caddy, Traefik, direct IP")
+                Text("Cloudflare Tunnel, local IP, or any HTTPS reverse proxy")
                     .font(SwingType.labelSmall).foregroundStyle(.tertiary)
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Username").font(SwingType.labelMedium).foregroundStyle(.secondary)
-                TextField("Username", text: $username)
-                    .textFieldStyle(.roundedBorder).autocorrectionDisabled().textInputAutocapitalization(.never)
+
+            if let e = auth.probeError {
+                Text(e).font(SwingType.labelSmall).foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
             }
+
+            Button { Task { await submitURL() } } label: {
+                Group {
+                    if auth.isProbing {
+                        HStack(spacing: 8) {
+                            ProgressView().tint(.white)
+                            Text("Connecting…")
+                        }
+                    } else {
+                        Text("Connect")
+                    }
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.swingPrimary).foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12)).font(SwingType.titleMedium)
+            }
+            .disabled(auth.isProbing || serverURL.trimmingCharacters(in: .whitespaces).isEmpty)
+
+            HStack {
+                Divider()
+                Text("or").font(SwingType.labelSmall).foregroundStyle(.tertiary).padding(.horizontal, 8)
+                Divider()
+            }
+            .frame(height: 20)
+
+            Button { showQR = true } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "qrcode.viewfinder").font(.system(size: 22))
+                        .foregroundStyle(Color.swingPrimary).frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Scan QR code").font(SwingType.labelMedium)
+                        Text("Settings › Pair device in the Swing Music web app")
+                            .font(SwingType.labelSmall).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .background(Color.secondary.opacity(0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.swingPrimary.opacity(0.3)))
+            }
+            .buttonStyle(.plain)
+
+            if isLoggingIn { ProgressView("Authenticating…") }
+            if let e = loginError {
+                Text(e).font(SwingType.labelSmall).foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            }
+
+            tips
+        }
+    }
+
+    // MARK: Step 2 — Probed: show login based on server settings
+    @ViewBuilder
+    private func probedView(probe: ProbeResult) -> some View {
+        VStack(spacing: 16) {
+            // Server confirmed banner
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.swingPrimary)
+                Text(probe.serverURL).font(SwingType.labelSmall).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Button("Change") {
+                    auth.probeResult = nil
+                    auth.probeError  = nil
+                    loginError = nil
+                }
+                .font(SwingType.labelSmall).foregroundStyle(Color.swingPrimary)
+            }
+            .padding(10).background(Color.swingPrimary.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            if let e = loginError {
+                Text(e).font(SwingType.labelSmall).foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            }
+
+            if !probe.usersOnLogin && probe.guestAllowed {
+                // Guest access — no credentials needed
+                guestView
+            } else {
+                credentialView(probe: probe)
+            }
+        }
+    }
+
+    // Guest login
+    private var guestView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "person.fill.checkmark")
+                .font(.system(size: 40)).foregroundStyle(Color.swingPrimary)
+            Text("Guest access enabled").font(SwingType.titleMedium)
+            Text("This server allows open access without a password.")
+                .font(SwingType.bodySmall).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button {
+                Task {
+                    isLoggingIn = true; loginError = nil
+                    loginError = await auth.loginAsGuest()
+                    isLoggingIn = false
+                }
+            } label: {
+                Group {
+                    if isLoggingIn { ProgressView().tint(.white) }
+                    else { Text("Enter as guest") }
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.swingPrimary).foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12)).font(SwingType.titleMedium)
+            }
+            .disabled(isLoggingIn)
+        }
+    }
+
+    // Username + password login (with optional user picker)
+    @ViewBuilder
+    private func credentialView(probe: ProbeResult) -> some View {
+        VStack(spacing: 14) {
+            // User picker when server returns multiple users
+            if probe.hasMultipleUsers {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Select account").font(SwingType.labelMedium).foregroundStyle(.secondary)
+                    ForEach(probe.users) { user in
+                        Button { username = user.username } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundStyle(username == user.username
+                                        ? Color.swingPrimary : Color.secondary)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(user.username).font(SwingType.labelMedium)
+                                    if !user.firstname.isEmpty {
+                                        let full = "\(user.firstname) \(user.lastname)"
+                                            .trimmingCharacters(in: .whitespaces)
+                                        Text(full).font(SwingType.labelSmall).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                if username == user.username {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.swingPrimary)
+                                }
+                            }
+                            .padding(10)
+                            .background(username == user.username
+                                ? Color.swingPrimary.opacity(0.08) : Color.secondary.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .onAppear { if username.isEmpty, let first = probe.users.first {
+                            username = first.username
+                        }}
+                    }
+                }
+            } else {
+                // Single user or unknown — show username field
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Username").font(SwingType.labelMedium).foregroundStyle(.secondary)
+                    TextField("Username", text: $username)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled().textInputAutocapitalization(.never)
+                        .onAppear { if let u = probe.users.first, username.isEmpty {
+                            username = u.username
+                        }}
+                }
+            }
+
+            // Password
             VStack(alignment: .leading, spacing: 6) {
                 Text("Password").font(SwingType.labelMedium).foregroundStyle(.secondary)
                 HStack {
@@ -754,78 +916,68 @@ struct ServerPairingView: View {
                         if showPass { TextField("Password", text: $password) }
                         else { SecureField("Password", text: $password) }
                     }
-                    .textFieldStyle(.roundedBorder).autocorrectionDisabled().textInputAutocapitalization(.never)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled().textInputAutocapitalization(.never)
                     Button { showPass.toggle() } label: {
                         Image(systemName: showPass ? "eye.slash" : "eye").foregroundStyle(.secondary)
                     }
                 }
             }
-            if let e = error { Text(e).font(SwingType.labelSmall).foregroundStyle(.red).multilineTextAlignment(.center) }
-            Button { Task { await attemptLogin() } } label: {
+
+            Button {
+                Task {
+                    isLoggingIn = true; loginError = nil
+                    loginError = await auth.loginWithPassword(username: username, password: password)
+                    isLoggingIn = false
+                }
+            } label: {
                 Group {
-                    if isLoading { ProgressView().tint(.white) } else { Text("Connect") }
+                    if isLoggingIn { ProgressView().tint(.white) }
+                    else { Text("Log in") }
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 14)
                 .background(Color.swingPrimary).foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 12)).font(SwingType.titleMedium)
             }
-            .disabled(isLoading || serverURL.isEmpty || username.isEmpty)
+            .disabled(isLoggingIn || username.isEmpty)
         }
     }
 
     private var tips: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Quick setup").font(SwingType.labelMedium).foregroundStyle(.secondary)
-            TipRow(icon: "cloud.fill",       color: .orange, title: "Cloudflare Tunnel", detail: "Free HTTPS, no port forwarding")
-            TipRow(icon: "lock.shield.fill", color: .blue,   title: "Local network",     detail: "192.168.x.x:1970 works automatically")
-            TipRow(icon: "network",          color: .teal,   title: "Any reverse proxy", detail: "nginx · Caddy · Traefik · all supported")
+            TipRow(icon: "cloud.fill",       color: .orange, title: "Cloudflare Tunnel",
+                   detail: "Free HTTPS, no port forwarding")
+            TipRow(icon: "lock.shield.fill", color: .blue,   title: "Local network",
+                   detail: "192.168.x.x:1970 works automatically")
+            TipRow(icon: "network",          color: .teal,   title: "Any reverse proxy",
+                   detail: "nginx · Caddy · Traefik · all supported")
         }
-        .padding(14).background(Color.secondary.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(14).background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    private func attemptLogin() async {
-        guard let normalized = AuthState.normalizeAndValidate(serverURL) else {
-            error = "Enter a valid URL (e.g. https://music.example.com)"; return
-        }
-        serverURL = normalized
-        if normalized.lowercased().hasPrefix("http://") && !auth.allowsInsecureHTTP {
+    private func submitURL() async {
+        var raw = serverURL.trimmingCharacters(in: .whitespaces)
+        guard !raw.isEmpty else { return }
+        raw = ConnectionConfig.normalize(raw)
+        serverURL = raw
+        if raw.lowercased().hasPrefix("http://") &&
+           !raw.lowercased().hasPrefix("https://") &&
+           !auth.allowsInsecureHTTP {
             showATS = true; return
         }
-        await doLogin()
-    }
-
-    private func doLogin() async {
-        isLoading = true; error = nil
-        do {
-            let r = try await SwingAPIClient.shared.loginWithPassword(
-                baseURL: serverURL, username: username, password: password)
-            await auth.pair(rawURL: serverURL, accessToken: r.accessToken,
-                            refreshToken: r.refreshToken, maxAge: r.maxAge)
-        } catch { self.error = error.localizedDescription }
-        isLoading = false
-    }
-
-    private func handleQR(_ encoded: String) {
-        guard let (url, code) = auth.parseQRCode(encoded) else {
-            error = "Invalid QR code"; return
-        }
-        isLoading = true; error = nil
-        Task {
-            do {
-                let r = try await SwingAPIClient.shared.loginWithQR(url: url, code: code)
-                await auth.pair(rawURL: url, accessToken: r.accessToken,
-                                refreshToken: r.refreshToken, maxAge: r.maxAge)
-            } catch { self.error = error.localizedDescription }
-            isLoading = false
-        }
+        await auth.probe(rawURL: raw)
     }
 }
+
 
 private struct TipRow: View {
     let icon: String; let color: Color; let title: String; let detail: String
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: icon).font(.system(size: 13)).foregroundStyle(color).frame(width: 20)
+            Image(systemName: icon).font(.system(size: 13))
+                .foregroundStyle(color).frame(width: 20)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(SwingType.labelMedium)
                 Text(detail).font(SwingType.labelSmall).foregroundStyle(.secondary)
@@ -834,42 +986,192 @@ private struct TipRow: View {
     }
 }
 
-// MARK: - QR scan stub
+// MARK: - Real QR scanner using AVCaptureSession + Vision
+import AVFoundation
+import Vision
+
 struct QRScanSheet: View {
     let onResult: (String) -> Void
     @Environment(\.dismiss) var dismiss
-    @State private var manual = ""
+    @State private var manualCode = ""
+    @State private var showManual = false
+    @State private var cameraAllowed: Bool? = nil  // nil=checking, true=ok, false=denied
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                Text("Point camera at the Swing Music QR code")
-                    .font(SwingType.bodyMedium).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center).padding(.top, 20)
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.secondary.opacity(0.1)).frame(width: 260, height: 260)
-                    .overlay(
-                        Image(systemName: "qrcode.viewfinder").font(.system(size: 64))
-                            .foregroundStyle(Color.swingPrimary.opacity(0.4))  // explicit Color. prefix
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .strokeBorder(Color.swingPrimary, lineWidth: 2)    // explicit Color. prefix
-                    )
-                VStack(spacing: 8) {
-                    Text("Or enter QR data manually").font(SwingType.labelSmall).foregroundStyle(.secondary)
-                    HStack {
-                        TextField("http://host:1970 CODE", text: $manual)
-                            .textFieldStyle(.roundedBorder).font(SwingType.bodySmall)
-                        Button("Pair") { onResult(manual) }.disabled(manual.isEmpty)
-                            .buttonStyle(.borderedProminent).tint(Color.swingPrimary)
+            VStack(spacing: 0) {
+                if cameraAllowed == true {
+                    QRCameraView(onScan: { code in
+                        dismiss()
+                        onResult(code)
+                    })
+                    .ignoresSafeArea(edges: .bottom)
+                } else if cameraAllowed == false {
+                    VStack(spacing: 16) {
+                        Image(systemName: "camera.slash").font(.system(size: 48))
+                            .foregroundStyle(.secondary).padding(.top, 60)
+                        Text("Camera access denied")
+                            .font(SwingType.titleMedium)
+                        Text("Go to Settings → Swing Music → Camera to allow access.")
+                            .font(SwingType.bodySmall).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center).padding(.horizontal, 32)
+                        Button("Open Settings") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent).tint(Color.swingPrimary)
+                    }
+                } else {
+                    ProgressView("Requesting camera…").padding(60)
+                }
+
+                // Manual fallback always visible at the bottom
+                VStack(spacing: 10) {
+                    Button(showManual ? "Hide manual entry" : "Enter code manually") {
+                        showManual.toggle()
+                    }
+                    .font(SwingType.labelSmall).foregroundStyle(.secondary)
+
+                    if showManual {
+                        HStack {
+                            TextField("http://192.168.1.x:1970 ABCDEF", text: $manualCode)
+                                .textFieldStyle(.roundedBorder)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .font(SwingType.bodySmall)
+                            Button("Pair") {
+                                let code = manualCode.trimmingCharacters(in: .whitespaces)
+                                guard !code.isEmpty else { return }
+                                dismiss()
+                                onResult(code)
+                            }
+                            .disabled(manualCode.isEmpty)
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color.swingPrimary)
+                        }
+                        .padding(.horizontal)
+                        Text("Format: URL followed by a space and the code shown in the web client")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center).padding(.horizontal)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.vertical, 16)
+                .background(.regularMaterial)
             }
             .navigationTitle("Scan QR Code")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
         }
+        .task { await checkCamera() }
+    }
+
+    private func checkCamera() async {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            cameraAllowed = true
+        case .notDetermined:
+            let granted = await AVCaptureDevice.requestAccess(for: .video)
+            cameraAllowed = granted
+        default:
+            cameraAllowed = false
+        }
+    }
+}
+
+// UIViewRepresentable wrapping AVCaptureSession with Vision QR detection
+struct QRCameraView: UIViewRepresentable {
+    let onScan: (String) -> Void
+
+    func makeUIView(context: Context) -> QRCaptureUIView {
+        let view = QRCaptureUIView()
+        view.onScan = onScan
+        return view
+    }
+
+    func updateUIView(_ uiView: QRCaptureUIView, context: Context) {}
+}
+
+final class QRCaptureUIView: UIView {
+    var onScan: ((String) -> Void)?
+    private var session    = AVCaptureSession()
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var scanned    = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setup() {
+        guard let device = AVCaptureDevice.default(for: .video),
+              let input  = try? AVCaptureDeviceInput(device: device),
+              session.canAddInput(input) else { return }
+        session.addInput(input)
+
+        let output = AVCaptureVideoDataOutput()
+        output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "qr.scan"))
+        if session.canAddOutput(output) { session.addOutput(output) }
+
+        let preview = AVCaptureVideoPreviewLayer(session: session)
+        preview.videoGravity = .resizeAspectFill
+        layer.addSublayer(preview)
+        previewLayer = preview
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.session.startRunning()
+        }
+
+        // Finder overlay
+        let finder = UIView()
+        finder.layer.borderColor = UIColor(Color.swingPrimary).cgColor
+        finder.layer.borderWidth = 2
+        finder.layer.cornerRadius = 12
+        finder.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(finder)
+        NSLayoutConstraint.activate([
+            finder.centerXAnchor.constraint(equalTo: centerXAnchor),
+            finder.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -30),
+            finder.widthAnchor.constraint(equalToConstant: 240),
+            finder.heightAnchor.constraint(equalToConstant: 240)
+        ])
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        previewLayer?.frame = bounds
+    }
+
+    override func removeFromSuperview() {
+        super.removeFromSuperview()
+        session.stopRunning()
+    }
+}
+
+extension QRCaptureUIView: AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput,
+                       didOutput sampleBuffer: CMSampleBuffer,
+                       from connection: AVCaptureConnection) {
+        guard !scanned,
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        let request = VNDetectBarcodesRequest { [weak self] req, _ in
+            guard let self,
+                  let results = req.results as? [VNBarcodeObservation],
+                  let payload = results.first(where: { $0.symbology == .qr })?.payloadStringValue,
+                  !payload.isEmpty else { return }
+            self.scanned = true
+            DispatchQueue.main.async { self.onScan?(payload) }
+        }
+        request.symbologies = [.qr]
+
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer,
+                                            orientation: .right)
+        try? handler.perform([request])
     }
 }

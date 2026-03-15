@@ -636,3 +636,54 @@ struct LogTrackRequest: Encodable {
 }
 struct LoginRequest: Encodable { let username: String; let password: String }
 private struct EmptyResponse: Codable {}
+
+// MARK: - Playlist models
+struct Playlist: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let trackCount: Int
+    let duration: Int
+    let image: String
+
+    enum CodingKeys: String, CodingKey {
+        case id; case name
+        case trackCount = "trackcount"
+        case duration; case image
+    }
+}
+
+struct PlaylistsResponse: Codable {
+    let playlists: [Playlist]
+}
+
+struct PlaylistWithTracks: Codable {
+    let info: Playlist
+    let tracks: [Track]
+}
+
+struct CreatePlaylistRequest: Encodable { let name: String }
+struct PlaylistTracksRequest: Encodable { let trackhashes: [String] }
+
+// MARK: - Recently played
+struct RecentlyPlayedResponse: Codable {
+    let tracks: [Track]
+    let albums: [Album]
+    let artists: [Artist]
+}
+
+// MARK: - Queue
+struct QueueResponse: Codable {
+    let tracks: [Track]
+    let currentIndex: Int
+    enum CodingKeys: String, CodingKey {
+        case tracks; case currentIndex = "current_index"
+    }
+}
+
+struct SaveQueueRequest: Encodable {
+    let trackhashes: [String]
+    let currentIndex: Int
+    enum CodingKeys: String, CodingKey {
+        case trackhashes; case currentIndex = "current_index"
+    }
+}
