@@ -13,7 +13,7 @@ struct MiniPlayerView: View {
                 // Art with playing indicator overlay
                 ZStack {
                     SwingAsyncImage(
-                        url: SwingAPIClient.shared.imageURL(path: "img/thumbnail/small/\(player.nowPlayingTrack?.image ?? "")"),
+                        url: SwingAPIClient.shared.imageURLSync(path: "img/thumbnail/small/\(player.nowPlayingTrack?.image ?? "")"),
                         size: 48
                     )
                     if player.playbackState != .paused {
@@ -106,7 +106,7 @@ struct NowPlayingView: View {
                 VStack(spacing: 0) {
                     // Art
                     SwingAsyncImage(
-                        url: SwingAPIClient.shared.imageURL(
+                        url: SwingAPIClient.shared.imageURLSync(
                             path: "img/thumbnail/\(player.nowPlayingTrack?.image ?? "")"),
                         size: 280
                     )
@@ -317,7 +317,7 @@ struct QueueView: View {
                 ForEach(Array(player.queue.enumerated()), id: \.element.trackHash) { i, track in
                     HStack(spacing: 12) {
                         SwingAsyncImage(
-                            url: SwingAPIClient.shared.imageURL(path: "img/thumbnail/small/\(track.image)"),
+                            url: SwingAPIClient.shared.imageURLSync(path: "img/thumbnail/small/\(track.image)"),
                             size: 44
                         )
                         VStack(alignment: .leading, spacing: 2) {

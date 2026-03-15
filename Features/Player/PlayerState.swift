@@ -139,7 +139,7 @@ final class PlayerState: ObservableObject {
         playbackState = .buffering
         teardown()
 
-        guard let url = SwingAPIClient.shared.streamURL(trackHash: track.trackHash) else {
+        guard let url = SwingAPIClient.shared.streamURLSync(trackHash: track.trackHash) else {
             playbackState = .error; isBuffering = false; return
         }
 
@@ -192,16 +192,19 @@ final class PlayerState: ObservableObject {
     private func observeTime() {
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] t in
-            guard let self, self.currentDuration > 0 else { return }
-            self.seekPosition = Float(t.seconds / self.currentDuration)
-            self.currentTimeStr = self.fmt(t.seconds)
+            guard let self else { return }
+            Task { @MainActor in
+                guard self.currentDuration > 0 else { return }
+                self.seekPosition = Float(t.seconds / self.currentDuration)
+                self.currentTimeStr = self.fmt(t.seconds)
+            }
         }
     }
 
     private func observeEnd() {
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: playerItem, queue: .main) { [weak self] _ in
-                self?.handleEnd()
+                Task { @MainActor [weak self] in self?.handleEnd() }
         }
     }
 
@@ -228,7 +231,7 @@ final class PlayerState: ObservableObject {
     }
 
     private func buildShuffle(startAt idx: Int) {
-        var all = Array(0..<queue.count).filter { $0 != idx }
+        let all = Array(0..<queue.count).filter { $0 != idx }
         shuffledOrder = [idx] + all.shuffled()
     }
     private func nextShuffle() -> Int {

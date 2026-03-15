@@ -84,7 +84,7 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Folder View  (FoldersAndTracks.kt)
+// MARK: - Folder View
 struct FolderView: View {
     @EnvironmentObject var player: PlayerState
     @State private var breadcrumbs: [Folder] = []
@@ -93,13 +93,14 @@ struct FolderView: View {
     @State private var isLoading = false
     @State private var error: String?
     @State private var bottomSheetTrack: Track?
+    // Track previous breadcrumb count to detect changes on iOS 16
+    @State private var breadcrumbCount = 0
 
     private var currentPath: String { breadcrumbs.last?.path ?? "" }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Breadcrumb bar
                 if !breadcrumbs.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 4) {
@@ -110,8 +111,8 @@ struct FolderView: View {
                             ) { _ in breadcrumbs = [] }
                             ForEach(Array(breadcrumbs.enumerated()), id: \.element.path) { i, f in
                                 Text("/").font(SwingType.labelSmall).foregroundStyle(.tertiary)
-                                PathIndicatorItem(folder: f, isCurrentPath: i == breadcrumbs.count - 1) { folder in
-                                    breadcrumbs = Array(breadcrumbs.prefix(upTo: i + 1))
+                                PathIndicatorItem(folder: f, isCurrentPath: i == breadcrumbs.count - 1) { _ in
+                                    breadcrumbs = Array(breadcrumbs.prefix(i + 1))
                                 }
                             }
                         }
@@ -133,22 +134,19 @@ struct FolderView: View {
                 } else {
                     List {
                         ForEach(currentFolders) { folder in
-                            FolderRow(folder: folder) { f in
-                                breadcrumbs.append(f)
-                            }
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
+                            FolderRow(folder: folder) { f in breadcrumbs.append(f) }
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
                         }
                         ForEach(Array(currentTracks.enumerated()), id: \.element.trackHash) { i, track in
                             TrackRow(
                                 track: track,
-                                baseURL: SwingAPIClient.shared.imageURL(path: ""),
+                                baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
                                 isPlaying: player.nowPlayingTrack?.trackHash == track.trackHash,
                                 playbackState: player.playbackState,
                                 onTap: {
                                     player.recreateQueue(
-                                        tracks: currentTracks,
-                                        startIndex: i,
+                                        tracks: currentTracks, startIndex: i,
                                         source: .folder(name: breadcrumbs.last?.name ?? "Folders",
                                                         path: currentPath))
                                 },
@@ -163,11 +161,12 @@ struct FolderView: View {
             }
             .navigationTitle("Folders")
             .task { await loadContent() }
-            .onChange(of: breadcrumbs) { _, _ in Task { await loadContent() } }
+            // iOS 16-compatible onChange: single-arg form
+            .onChange(of: breadcrumbs.count) { _ in Task { await loadContent() } }
             .sheet(item: $bottomSheetTrack) { track in
                 TrackBottomSheet(
                     track: track,
-                    baseURL: SwingAPIClient.shared.imageURL(path: ""),
+                    baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
                     isFavorite: track.isFavorite,
                     onDismiss: { bottomSheetTrack = nil },
                     onPlayNext:   { player.playNext(track: $0) },
@@ -187,30 +186,28 @@ struct FolderView: View {
                 folder: currentPath, start: 0, limit: 500)
             currentFolders = result.folders
             currentTracks  = result.tracks
-        } catch {
-            self.error = error.localizedDescription
-        }
+        } catch { self.error = error.localizedDescription }
         isLoading = false
     }
 }
 
-// MARK: - All Albums  (AllAlbums.kt)
+// MARK: - All Albums
 struct AllAlbumsView: View {
     @EnvironmentObject var player: PlayerState
     @State private var albums: [Album] = []
     @State private var total = 0
     @State private var isLoading = false
-    @State private var selectedAlbum: Album?
+    // iOS 16: use Bool + separate selection instead of navigationDestination(item:)
+    @State private var selectedAlbum: Album? = nil
+    @State private var showAlbumDetail = false
     @State private var sortBy: SortBy = .title
     @State private var sortOrder: SortOrder = .ascending
     private let pageSize = 40
-
     let cols = [GridItem(.flexible()), GridItem(.flexible())]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                // Sort chips
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach([SortBy.title, .albumArtists, .date, .playCount], id: \.rawValue) { s in
@@ -221,8 +218,7 @@ struct AllAlbumsView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
                 }
 
                 if isLoading && albums.isEmpty {
@@ -232,8 +228,8 @@ struct AllAlbumsView: View {
                         ForEach(albums) { album in
                             AlbumCard(
                                 album: album,
-                                baseURL: SwingAPIClient.shared.imageURL(path: ""),
-                                onTap: { _ in selectedAlbum = album }
+                                baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
+                                onTap: { _ in selectedAlbum = album; showAlbumDetail = true }
                             )
                             .onAppear {
                                 if album.id == albums.last?.id && albums.count < total {
@@ -247,8 +243,9 @@ struct AllAlbumsView: View {
             }
             .navigationTitle("Albums (\(total))")
             .task { if albums.isEmpty { await load() } }
-            .navigationDestination(item: $selectedAlbum) { album in
-                AlbumDetailView(album: album)
+            // iOS 16-compatible: isPresented instead of item
+            .navigationDestination(isPresented: $showAlbumDetail) {
+                if let album = selectedAlbum { AlbumDetailView(album: album) }
             }
         }
     }
@@ -266,7 +263,7 @@ struct AllAlbumsView: View {
     }
 }
 
-// MARK: - Album Detail  (AlbumWithInfo.kt)
+// MARK: - Album Detail
 struct AlbumDetailView: View {
     let album: Album
     @EnvironmentObject var player: PlayerState
@@ -279,10 +276,9 @@ struct AlbumDetailView: View {
                 ProgressView().padding(40)
             } else if let d = detail {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Header
                     HStack(alignment: .bottom, spacing: 16) {
                         SwingAsyncImage(
-                            url: SwingAPIClient.shared.imageURL(path: "img/thumbnail/medium/\(album.image)"),
+                            url: SwingAPIClient.shared.imageURLSync(path: "img/thumbnail/medium/\(album.image)"),
                             size: 120
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -304,29 +300,24 @@ struct AlbumDetailView: View {
                     }
                     .padding(16)
 
-                    // Play button
                     Button {
                         player.recreateQueue(tracks: d.tracks, startIndex: 0,
                             source: .album(name: d.albumInfo.title, hash: d.albumInfo.albumHash))
                     } label: {
                         Label("Play", systemImage: "play.fill")
                             .font(SwingType.titleSmall)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.swingPrimary)
-                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Color.swingPrimary).foregroundStyle(.white)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, 16).padding(.bottom, 8)
 
                     Divider()
 
-                    // Tracks
                     ForEach(Array(d.tracks.enumerated()), id: \.element.trackHash) { i, track in
                         TrackRow(
                             track: track,
-                            baseURL: SwingAPIClient.shared.imageURL(path: ""),
+                            baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
                             isPlaying: player.nowPlayingTrack?.trackHash == track.trackHash,
                             playbackState: player.playbackState,
                             onTap: {
@@ -338,10 +329,7 @@ struct AlbumDetailView: View {
                     }
 
                     if !d.copyright.isEmpty {
-                        Text(d.copyright)
-                            .font(SwingType.labelSmall)
-                            .foregroundStyle(.tertiary)
-                            .padding(16)
+                        Text(d.copyright).font(SwingType.labelSmall).foregroundStyle(.tertiary).padding(16)
                     }
                 }
             }
@@ -349,20 +337,20 @@ struct AlbumDetailView: View {
         .navigationTitle(album.title)
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            do {
-                detail = try await SwingAPIClient.shared.getAlbumWithInfo(albumHash: album.albumHash)
-            } catch {}
+            do { detail = try await SwingAPIClient.shared.getAlbumWithInfo(albumHash: album.albumHash) }
+            catch {}
             isLoading = false
         }
     }
 }
 
-// MARK: - All Artists  (AllArtists.kt)
+// MARK: - All Artists
 struct AllArtistsView: View {
     @State private var artists: [Artist] = []
     @State private var total = 0
     @State private var isLoading = false
-    @State private var selectedArtist: Artist?
+    @State private var selectedArtist: Artist? = nil
+    @State private var showArtistDetail = false
     private let pageSize = 40
     let cols = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
 
@@ -376,9 +364,9 @@ struct AllArtistsView: View {
                         ForEach(artists) { artist in
                             ArtistCell(
                                 artist: artist,
-                                baseURL: SwingAPIClient.shared.imageURL(path: ""),
+                                baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
                                 size: 100,
-                                onTap: { _ in selectedArtist = artist }
+                                onTap: { _ in selectedArtist = artist; showArtistDetail = true }
                             )
                             .onAppear {
                                 if artist.id == artists.last?.id && artists.count < total {
@@ -392,8 +380,8 @@ struct AllArtistsView: View {
             }
             .navigationTitle("Artists (\(total))")
             .task { if artists.isEmpty { await load() } }
-            .navigationDestination(item: $selectedArtist) { artist in
-                ArtistInfoView(artist: artist)
+            .navigationDestination(isPresented: $showArtistDetail) {
+                if let artist = selectedArtist { ArtistInfoView(artist: artist) }
             }
         }
     }
@@ -410,7 +398,7 @@ struct AllArtistsView: View {
     }
 }
 
-// MARK: - Artist Info  (ArtistInfo.kt)
+// MARK: - Artist Info
 struct ArtistInfoView: View {
     let artist: Artist
     @EnvironmentObject var player: PlayerState
@@ -423,18 +411,13 @@ struct ArtistInfoView: View {
                 ProgressView().padding(40)
             } else if let info {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Header art
                     SwingAsyncImage(
-                        url: SwingAPIClient.shared.imageURL(path: "img/artist/\(artist.image)"),
-                        size: 200,
-                        isCircle: true
+                        url: SwingAPIClient.shared.imageURLSync(path: "img/artist/\(artist.image)"),
+                        size: 200, isCircle: true
                     )
-                    .frame(maxWidth: .infinity)
-                    .padding(16)
+                    .frame(maxWidth: .infinity).padding(16)
 
-                    Text(info.artist.name)
-                        .font(SwingType.headlineLarge)
-                        .padding(.horizontal, 16)
+                    Text(info.artist.name).font(SwingType.headlineLarge).padding(.horizontal, 16)
 
                     HStack(spacing: 12) {
                         Text("\(info.artist.albumCount) albums")
@@ -444,13 +427,12 @@ struct ArtistInfoView: View {
                     .font(SwingType.bodySmall).foregroundStyle(.secondary)
                     .padding(.horizontal, 16).padding(.top, 4)
 
-                    // Top tracks
                     if !info.tracks.isEmpty {
                         SectionHeader(title: "Top tracks")
                         ForEach(Array(info.tracks.prefix(5).enumerated()), id: \.element.trackHash) { i, track in
                             TrackRow(
                                 track: track,
-                                baseURL: SwingAPIClient.shared.imageURL(path: ""),
+                                baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
                                 isPlaying: player.nowPlayingTrack?.trackHash == track.trackHash,
                                 playbackState: player.playbackState,
                                 onTap: {
@@ -461,22 +443,21 @@ struct ArtistInfoView: View {
                         }
                     }
 
-                    // Albums
-                    let allGroups: [(String, [Album])] = [
-                        ("Albums", info.albumsAndAppearances.albums),
+                    let groups: [(String, [Album])] = [
+                        ("Albums",        info.albumsAndAppearances.albums),
                         ("Singles & EPs", info.albumsAndAppearances.singlesAndEps),
-                        ("Appearances", info.albumsAndAppearances.appearances),
-                        ("Compilations", info.albumsAndAppearances.compilations)
+                        ("Appearances",   info.albumsAndAppearances.appearances),
+                        ("Compilations",  info.albumsAndAppearances.compilations)
                     ].filter { !$1.isEmpty }
 
-                    ForEach(allGroups, id: \.0) { group in
+                    ForEach(groups, id: \.0) { group in
                         SectionHeader(title: group.0)
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 0) {
                                 ForEach(group.1) { album in
                                     AlbumCard(
                                         album: album,
-                                        baseURL: SwingAPIClient.shared.imageURL(path: ""),
+                                        baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
                                         screen: .artist,
                                         albumArtistHash: artist.artistHash
                                     )
@@ -502,15 +483,12 @@ struct ArtistInfoView: View {
 private struct SectionHeader: View {
     let title: String
     var body: some View {
-        Text(title)
-            .font(SwingType.titleMedium)
-            .padding(.horizontal, 16)
-            .padding(.top, 20)
-            .padding(.bottom, 4)
+        Text(title).font(SwingType.titleMedium)
+            .padding(.horizontal, 16).padding(.top, 20).padding(.bottom, 4)
     }
 }
 
-// MARK: - Search  (Search.kt)
+// MARK: - Search
 struct SearchView: View {
     @EnvironmentObject var player: PlayerState
     @State private var query = ""
@@ -533,10 +511,11 @@ struct SearchView: View {
             }
             .navigationTitle("Search")
             .searchable(text: $query, prompt: "Tracks, albums, artists…")
-            .onChange(of: query) { _, q in
+            // iOS 16-compatible single-arg onChange
+            .onChange(of: query) { q in
                 debounceTask?.cancel()
                 debounceTask = Task {
-                    try? await Task.sleep(nanoseconds: 350_000_000) // 350ms debounce
+                    try? await Task.sleep(nanoseconds: 350_000_000)
                     guard !Task.isCancelled, !q.isEmpty else { return }
                     await search(q)
                 }
@@ -555,24 +534,25 @@ struct SearchView: View {
     private func searchResults(_ r: TopSearchResults) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Top result card
                 if let top = r.topResultItem {
                     TopSearchResultCard(
                         item: top,
-                        baseURL: SwingAPIClient.shared.imageURL(path: ""),
-                        onPlayTap: { type, hash in handleTopResultPlay(type: type, hash: hash, results: r) }
+                        baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
+                        onPlayTap: { type, hash in
+                            if type == "track" {
+                                player.recreateQueue(tracks: r.tracks, startIndex: 0, source: .search(query: query))
+                            }
+                        }
                     )
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
                 }
 
-                // Tracks
                 if !r.tracks.isEmpty {
                     SectionHeader(title: "Tracks")
                     ForEach(Array(r.tracks.enumerated()), id: \.element.trackHash) { i, track in
                         TrackRow(
                             track: track,
-                            baseURL: SwingAPIClient.shared.imageURL(path: ""),
+                            baseURL: SwingAPIClient.shared.imageURLSync(path: ""),
                             isPlaying: player.nowPlayingTrack?.trackHash == track.trackHash,
                             playbackState: player.playbackState,
                             onTap: {
@@ -583,14 +563,12 @@ struct SearchView: View {
                     }
                 }
 
-                // Albums
                 if !r.albums.isEmpty {
                     SectionHeader(title: "Albums")
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top) {
                             ForEach(r.albums) { album in
-                                AlbumCard(album: album,
-                                    baseURL: SwingAPIClient.shared.imageURL(path: ""))
+                                AlbumCard(album: album, baseURL: SwingAPIClient.shared.imageURLSync(path: ""))
                                     .frame(width: 140)
                             }
                         }
@@ -598,15 +576,13 @@ struct SearchView: View {
                     }
                 }
 
-                // Artists
                 if !r.artists.isEmpty {
                     SectionHeader(title: "Artists")
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
                             ForEach(r.artists) { artist in
                                 ArtistCell(artist: artist,
-                                    baseURL: SwingAPIClient.shared.imageURL(path: ""),
-                                    size: 80)
+                                    baseURL: SwingAPIClient.shared.imageURLSync(path: ""), size: 80)
                                     .frame(width: 100)
                             }
                         }
@@ -614,16 +590,6 @@ struct SearchView: View {
                     }
                 }
             }
-        }
-    }
-
-    private func handleTopResultPlay(type: String, hash: String, results: TopSearchResults) {
-        switch type {
-        case "track":
-            if let track = results.tracks.first(where: { $0.trackHash == hash }) {
-                player.recreateQueue(tracks: results.tracks, startIndex: 0, source: .search(query: query))
-            }
-        default: break
         }
     }
 }
@@ -641,8 +607,7 @@ struct SettingsView: View {
                         InsecureBanner { showATSWarning = true }
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     }
-                    LabeledContent("Server", value: auth.serverURL)
-                        .font(SwingType.bodySmall)
+                    LabeledContent("Server", value: auth.serverURL).font(SwingType.bodySmall)
                     Button("Re-pair / change server") { Task { await auth.unpair() } }
                     Button("Disconnect", role: .destructive) { Task { await auth.unpair() } }
                 } header: { Text("Server") }
@@ -661,7 +626,6 @@ struct SettingsView: View {
                 Section {
                     LabeledContent("Version", value: "1.0.0-beta")
                     LabeledContent("TLS minimum", value: "1.3")
-                    LabeledContent("Source", value: "SwingMusic iOS")
                 } header: { Text("About") }
             }
             .navigationTitle("Settings")
@@ -675,17 +639,17 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Server Pairing  (LoginWithQrCode.kt + LoginWithUsername.kt)
+// MARK: - Server Pairing
 struct ServerPairingView: View {
     @EnvironmentObject var auth: AuthState
-    @State private var serverURL  = ""
-    @State private var username   = ""
-    @State private var password   = ""
-    @State private var showPass   = false
-    @State private var isLoading  = false
+    @State private var serverURL = ""
+    @State private var username  = ""
+    @State private var password  = ""
+    @State private var showPass  = false
+    @State private var isLoading = false
     @State private var error: String?
-    @State private var showATS    = false
-    @State private var showQR     = false
+    @State private var showATS   = false
+    @State private var showQR    = false
     @State private var mode: Mode = .qr
 
     enum Mode { case qr, password }
@@ -694,12 +658,12 @@ struct ServerPairingView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 28) {
-                    // Logo
                     VStack(spacing: 8) {
                         ZStack {
                             Circle().fill(Color.swingPrimary.opacity(0.12)).frame(width: 80, height: 80)
                             Image(systemName: "music.note.house.fill")
-                                .font(.system(size: 36)).foregroundStyle(.swingPrimary)
+                                .font(.system(size: 36))
+                                .foregroundStyle(Color.swingPrimary) // explicit Color. prefix
                         }
                         Text("Swing Music").font(SwingType.headlineMedium)
                         Text("Connect to your server").font(SwingType.bodyMedium).foregroundStyle(.secondary)
@@ -710,8 +674,7 @@ struct ServerPairingView: View {
                         Text("QR Code").tag(Mode.qr)
                         Text("Username").tag(Mode.password)
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
+                    .pickerStyle(.segmented).padding(.horizontal)
 
                     if mode == .qr { qrSection } else { passwordSection }
                     tips
@@ -735,7 +698,9 @@ struct ServerPairingView: View {
         VStack(spacing: 12) {
             Button { showQR = true } label: {
                 VStack(spacing: 12) {
-                    Image(systemName: "qrcode.viewfinder").font(.system(size: 48)).foregroundStyle(.swingPrimary)
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 48))
+                        .foregroundStyle(Color.swingPrimary)       // explicit Color. prefix
                     Text("Scan QR code").font(SwingType.titleMedium)
                     Text("Settings > Pair device in the web client")
                         .font(SwingType.bodySmall).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -743,7 +708,8 @@ struct ServerPairingView: View {
                 .frame(maxWidth: .infinity).padding(24)
                 .background(Color.secondary.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.swingPrimary.opacity(0.3)))
+                .overlay(RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.swingPrimary.opacity(0.3)))  // explicit Color. prefix
             }
             .buttonStyle(.plain)
             if isLoading { ProgressView("Authenticating…") }
@@ -859,7 +825,7 @@ private struct TipRow: View {
     }
 }
 
-// MARK: - QR scan stub (replace with AVCaptureSession + VisionKit)
+// MARK: - QR scan stub
 struct QRScanSheet: View {
     let onResult: (String) -> Void
     @Environment(\.dismiss) var dismiss
@@ -873,16 +839,21 @@ struct QRScanSheet: View {
                     .multilineTextAlignment(.center).padding(.top, 20)
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color.secondary.opacity(0.1)).frame(width: 260, height: 260)
-                    .overlay(Image(systemName: "qrcode.viewfinder").font(.system(size: 64))
-                        .foregroundStyle(.swingPrimary.opacity(0.4)))
-                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.swingPrimary, lineWidth: 2))
+                    .overlay(
+                        Image(systemName: "qrcode.viewfinder").font(.system(size: 64))
+                            .foregroundStyle(Color.swingPrimary.opacity(0.4))  // explicit Color. prefix
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(Color.swingPrimary, lineWidth: 2)    // explicit Color. prefix
+                    )
                 VStack(spacing: 8) {
                     Text("Or enter QR data manually").font(SwingType.labelSmall).foregroundStyle(.secondary)
                     HStack {
                         TextField("http://host:1970 CODE", text: $manual)
                             .textFieldStyle(.roundedBorder).font(SwingType.bodySmall)
                         Button("Pair") { onResult(manual) }.disabled(manual.isEmpty)
-                            .buttonStyle(.borderedProminent).tint(.swingPrimary)
+                            .buttonStyle(.borderedProminent).tint(Color.swingPrimary)
                     }
                 }
                 .padding(.horizontal)

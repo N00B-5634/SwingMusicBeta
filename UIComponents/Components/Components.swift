@@ -336,7 +336,7 @@ struct SoundSignalBars: View {
         }
         .padding(.horizontal, 2)
         .onAppear { if animate { startAnimation() } }
-        .onChange(of: animate) { _, on in if on { startAnimation() } }
+        .onChange(of: animate) { on in if on { startAnimation() } }
     }
 
     private func startAnimation() {

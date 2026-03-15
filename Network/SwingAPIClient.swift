@@ -51,12 +51,15 @@ final class SwingTLSDelegate: NSObject, URLSessionDelegate {
 // MARK: - API Client (actor — thread-safe)
 actor SwingAPIClient {
     static let shared = SwingAPIClient()
+    // Shared nonisolated cache for sync URL helpers
+    static var cachedToken: String? = nil
     private var config: ConnectionConfig?
     private var session: URLSession = .shared
     private let tlsDelegate = SwingTLSDelegate()
 
     func configure(with config: ConnectionConfig) {
         self.config = config
+        SwingAPIClient.cachedToken = config.accessToken
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest  = 15
         cfg.timeoutIntervalForResource = 3600  // long audio streams
@@ -126,10 +129,34 @@ actor SwingAPIClient {
         config?.baseURL?.appendingPathComponent(path)
     }
 
+    // nonisolated: safe to call synchronously from SwiftUI view body
+    nonisolated func imageURLSync(path: String) -> URL? {
+        guard let raw = UserDefaults.standard.string(forKey: "swing_server_url") else { return nil }
+        let base = raw.hasSuffix("/") ? raw : raw + "/"
+        guard let url = URL(string: base) else { return nil }
+        return url.appendingPathComponent(path)
+    }
+
+    // nonisolated stream URL — appends ?token= from Keychain via UserDefaults base
+    nonisolated func streamURLSync(trackHash: String) -> URL? {
+        guard let raw = UserDefaults.standard.string(forKey: "swing_server_url") else { return nil }
+        let base = raw.hasSuffix("/") ? raw : raw + "/"
+        guard let baseURL = URL(string: base) else { return nil }
+        var comps = URLComponents(url: baseURL.appendingPathComponent("api/stream/\(trackHash)"),
+                                  resolvingAgainstBaseURL: false)
+        // Token read from Keychain via UserDefaults is not available nonisolated,
+        // so we read it from a shared in-memory store set during configure()
+        if let token = SwingAPIClient.cachedToken {
+            comps?.queryItems = [URLQueryItem(name: "token", value: token)]
+        }
+        return comps?.url
+    }
+
     func currentConfig() -> ConnectionConfig? { config }
     func updateTokens(access: String, refresh: String, maxAge: Int64) {
         config?.accessToken  = access
         config?.refreshToken = refresh
+        SwingAPIClient.cachedToken = access
     }
 }
 
