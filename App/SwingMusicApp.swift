@@ -93,8 +93,7 @@ struct FolderView: View {
     @State private var isLoading = false
     @State private var error: String?
     @State private var bottomSheetTrack: Track?
-    // Track previous breadcrumb count to detect changes on iOS 16
-    @State private var breadcrumbCount = 0
+    @State private var loadedPath: String = "__unloaded__"
 
     private var currentPath: String { breadcrumbs.last?.path ?? "" }
 
@@ -161,8 +160,8 @@ struct FolderView: View {
             }
             .navigationTitle("Folders")
             .task { await loadContent() }
-            // iOS 16-compatible onChange: single-arg form
-            .onChange(of: breadcrumbs.count) { _ in Task { await loadContent() } }
+            // Watch the actual path string so back-navigation to same depth also fires
+            .onChange(of: currentPath) { _ in Task { await loadContent() } }
             .sheet(item: $bottomSheetTrack) { track in
                 TrackBottomSheet(
                     track: track,
@@ -181,11 +180,13 @@ struct FolderView: View {
 
     private func loadContent() async {
         isLoading = true; error = nil
+        let path = currentPath
         do {
             let result = try await SwingAPIClient.shared.getFoldersAndTracks(
-                folder: currentPath, start: 0, limit: 500)
+                folder: path, start: 0, limit: 500)
             currentFolders = result.folders
             currentTracks  = result.tracks
+            loadedPath = path
         } catch { self.error = error.localizedDescription }
         isLoading = false
     }
@@ -661,9 +662,17 @@ struct ServerPairingView: View {
                     VStack(spacing: 8) {
                         ZStack {
                             Circle().fill(Color.swingPrimary.opacity(0.12)).frame(width: 80, height: 80)
-                            Image(systemName: "music.note.house.fill")
-                                .font(.system(size: 36))
-                                .foregroundStyle(Color.swingPrimary) // explicit Color. prefix
+                            // SwingLogo is in App/Assets.xcassets/SwingLogo.imageset/
+                            // Drop your PNG there. Falls back to SF symbol if not present.
+                            if let _ = UIImage(named: "SwingLogo") {
+                                Image("SwingLogo")
+                                    .resizable().scaledToFit()
+                                    .frame(width: 52, height: 52)
+                            } else {
+                                Image(systemName: "music.note.house.fill")
+                                    .font(.system(size: 36))
+                                    .foregroundStyle(Color.swingPrimary)
+                            }
                         }
                         Text("Swing Music").font(SwingType.headlineMedium)
                         Text("Connect to your server").font(SwingType.bodyMedium).foregroundStyle(.secondary)
