@@ -6,12 +6,11 @@
 	objectVersion = 56;
 	objects = {
 
-/* ---- Build configuration ---- */
+/* ---- Build configuration - target ---- */
 		1A000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -32,7 +31,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -41,7 +39,7 @@
 				INFOPLIST_FILE = "App/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MARKETING_VERSION = "1.0.0-beta";
-				PRODUCT_BUNDLE_IDENTIFIER = "org.swingmusic.ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.swingmusic.ios";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
@@ -50,59 +48,20 @@
 			};
 			name = Release;
 		};
-		1A000003 /* Debug - project */ = {
+
+/* ---- Build configuration - project ---- */
+		1A000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1","$(inherited)",);
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -110,30 +69,16 @@
 			};
 			name = Debug;
 		};
-		1A000004 /* Release - project */ = {
+		1A000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -145,102 +90,88 @@
 /* ---- Config lists ---- */
 		1A000010 /* Build configuration list - project */ = {
 			isa = XCConfigurationList;
-			buildConfigurations = (
-				1A000003 /* Debug */,
-				1A000004 /* Release */,
-			);
+			buildConfigurations = (1A000003 /* Debug */, 1A000004 /* Release */,);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		1A000011 /* Build configuration list - target */ = {
 			isa = XCConfigurationList;
-			buildConfigurations = (
-				1A000001 /* Debug */,
-				1A000002 /* Release */,
-			);
+			buildConfigurations = (1A000001 /* Debug */, 1A000002 /* Release */,);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 
 /* ---- File references ---- */
-		1A000020 /* SwingMusicApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwingMusicApp.swift; sourceTree = "<group>"; };
-		1A000021 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		1A000020 /* SwingMusicApp.swift */  = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwingMusicApp.swift;  sourceTree = "<group>"; };
+		1A000021 /* Models.swift */         = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift;         sourceTree = "<group>"; };
 		1A000022 /* SwingAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwingAPIClient.swift; sourceTree = "<group>"; };
-		1A000023 /* AuthState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthState.swift; sourceTree = "<group>"; };
-		1A000024 /* PlayerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerState.swift; sourceTree = "<group>"; };
-		1A000025 /* PlayerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViews.swift; sourceTree = "<group>"; };
-		1A000026 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		1A000027 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
-		1A000028 /* ATSWarning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ATSWarning.swift; sourceTree = "<group>"; };
-		1A000029 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		1A000030 /* SwingMusicApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwingMusicApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A000023 /* AuthState.swift */      = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthState.swift;      sourceTree = "<group>"; };
+		1A000024 /* PlayerState.swift */    = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerState.swift;    sourceTree = "<group>"; };
+		1A000025 /* PlayerViews.swift */    = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViews.swift;    sourceTree = "<group>"; };
+		1A000026 /* Theme.swift */          = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift;          sourceTree = "<group>"; };
+		1A000027 /* Components.swift */     = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift;     sourceTree = "<group>"; };
+		1A000028 /* ATSWarning.swift */     = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ATSWarning.swift;     sourceTree = "<group>"; };
+		1A000029 /* Info.plist */           = {isa = PBXFileReference; lastKnownFileType = text.plist.xml;   path = Info.plist;           sourceTree = "<group>"; };
+		1A000030 /* SwingMusicApp.app */    = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwingMusicApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 
 /* ---- Groups ---- */
 		1A000040 /* Products */ = {
 			isa = PBXGroup;
-			children = (
-				1A000030 /* SwingMusicApp.app */,
-			);
+			children = (1A000030 /* SwingMusicApp.app */,);
 			name = Products;
 			sourceTree = "<group>";
 		};
 		1A000041 /* App */ = {
 			isa = PBXGroup;
-			children = (
-				1A000020 /* SwingMusicApp.swift */,
-				1A000029 /* Info.plist */,
-			);
+			children = (1A000020 /* SwingMusicApp.swift */, 1A000029 /* Info.plist */,);
 			path = App;
 			sourceTree = "<group>";
 		};
 		1A000042 /* Core */ = {
 			isa = PBXGroup;
-			children = (
-				1A000021 /* Models.swift */,
-			);
+			children = (1A000021 /* Models.swift */,);
 			path = Core;
 			sourceTree = "<group>";
 		};
 		1A000043 /* Network */ = {
 			isa = PBXGroup;
-			children = (
-				1A000022 /* SwingAPIClient.swift */,
-			);
+			children = (1A000022 /* SwingAPIClient.swift */,);
 			path = Network;
 			sourceTree = "<group>";
 		};
 		1A000044 /* Auth */ = {
 			isa = PBXGroup;
-			children = (
-				1A000023 /* AuthState.swift */,
-			);
+			children = (1A000023 /* AuthState.swift */,);
 			path = Auth;
 			sourceTree = "<group>";
 		};
-		1A000045 /* Features */ = {
+		1A000045 /* Player */ = {
 			isa = PBXGroup;
-			children = (
-				1A000046 /* Player */,
-			);
-			path = Features;
-			sourceTree = "<group>";
-		};
-		1A000046 /* Player */ = {
-			isa = PBXGroup;
-			children = (
-				1A000024 /* PlayerState.swift */,
-				1A000025 /* PlayerViews.swift */,
-			);
+			children = (1A000024 /* PlayerState.swift */, 1A000025 /* PlayerViews.swift */,);
 			path = Player;
 			sourceTree = "<group>";
 		};
-		1A000047 /* UIComponents */ = {
+		1A000046 /* Features */ = {
 			isa = PBXGroup;
-			children = (
-				1A000026 /* Theme.swift */,
-				1A000027 /* Components.swift */,
-				1A000028 /* ATSWarning.swift */,
-			);
+			children = (1A000045 /* Player */,);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		1A000047 /* Theme */ = {
+			isa = PBXGroup;
+			children = (1A000026 /* Theme.swift */,);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		1A000048 /* Components */ = {
+			isa = PBXGroup;
+			children = (1A000027 /* Components.swift */, 1A000028 /* ATSWarning.swift */,);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		1A000049 /* UIComponents */ = {
+			isa = PBXGroup;
+			children = (1A000047 /* Theme */, 1A000048 /* Components */,);
 			path = UIComponents;
 			sourceTree = "<group>";
 		};
@@ -251,12 +182,23 @@
 				1A000042 /* Core */,
 				1A000043 /* Network */,
 				1A000044 /* Auth */,
-				1A000045 /* Features */,
-				1A000047 /* UIComponents */,
+				1A000046 /* Features */,
+				1A000049 /* UIComponents */,
 				1A000040 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
+
+/* ---- Build file refs ---- */
+		1A000070 /* SwingMusicApp.swift in Sources */  = {isa = PBXBuildFile; fileRef = 1A000020; };
+		1A000071 /* Models.swift in Sources */         = {isa = PBXBuildFile; fileRef = 1A000021; };
+		1A000072 /* SwingAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000022; };
+		1A000073 /* AuthState.swift in Sources */      = {isa = PBXBuildFile; fileRef = 1A000023; };
+		1A000074 /* PlayerState.swift in Sources */    = {isa = PBXBuildFile; fileRef = 1A000024; };
+		1A000075 /* PlayerViews.swift in Sources */    = {isa = PBXBuildFile; fileRef = 1A000025; };
+		1A000076 /* Theme.swift in Sources */          = {isa = PBXBuildFile; fileRef = 1A000026; };
+		1A000077 /* Components.swift in Sources */     = {isa = PBXBuildFile; fileRef = 1A000027; };
+		1A000078 /* ATSWarning.swift in Sources */     = {isa = PBXBuildFile; fileRef = 1A000028; };
 
 /* ---- Build phases ---- */
 		1A000060 /* Sources */ = {
@@ -278,49 +220,14 @@
 		1A000061 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-			);
+			files = ();
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1A000062 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-			);
+			files = ();
 			runOnlyForDeploymentPostprocessing = 0;
-		};
-
-/* ---- Build file refs ---- */
-		1A000070 /* SwingMusicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000020 /* SwingMusicApp.swift */; };
-		1A000071 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000021 /* Models.swift */; };
-		1A000072 /* SwingAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000022 /* SwingAPIClient.swift */; };
-		1A000073 /* AuthState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000023 /* AuthState.swift */; };
-		1A000074 /* PlayerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000024 /* PlayerState.swift */; };
-		1A000075 /* PlayerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000025 /* PlayerViews.swift */; };
-		1A000076 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000026 /* Theme.swift */; };
-		1A000077 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000027 /* Components.swift */; };
-		1A000078 /* ATSWarning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000028 /* ATSWarning.swift */; };
-
-/* ---- Native target ---- */
-		1A000080 /* SwingMusicApp */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 1A000011 /* Build configuration list - target */;
-			buildPhases = (
-				1A000060 /* Sources */,
-				1A000061 /* Resources */,
-				1A000062 /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = SwingMusicApp;
-			packageProductDependencies = (
-				1A000090 /* Kingfisher */,
-			);
-			productName = SwingMusicApp;
-			productReference = 1A000030 /* SwingMusicApp.app */;
-			productType = "com.apple.product-type.application";
 		};
 
 /* ---- Package dependency ---- */
@@ -338,6 +245,24 @@
 			};
 		};
 
+/* ---- Native target ---- */
+		1A000080 /* SwingMusicApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A000011;
+			buildPhases = (
+				1A000060 /* Sources */,
+				1A000061 /* Resources */,
+				1A000062 /* Frameworks */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = SwingMusicApp;
+			packageProductDependencies = (1A000090 /* Kingfisher */,);
+			productName = SwingMusicApp;
+			productReference = 1A000030 /* SwingMusicApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+
 /* ---- Project ---- */
 		1A000100 /* Project */ = {
 			isa = PBXProject;
@@ -346,29 +271,20 @@
 				LastSwiftUpdateCheck = 1540;
 				LastUpgradeCheck = 1540;
 				TargetAttributes = {
-					1A000080 = {
-						CreatedOnToolsVersion = 15.4;
-					};
+					1A000080 = {CreatedOnToolsVersion = 15.4;};
 				};
 			};
-			buildConfigurationList = 1A000010 /* Build configuration list - project */;
+			buildConfigurationList = 1A000010;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
-			knownRegions = (
-				en,
-				Base,
-			);
-			mainGroup = 1A000050 /* SwingMusicBeta */;
-			packageReferences = (
-				1A000091 /* XCRemoteSwiftPackageReference "Kingfisher" */,
-			);
+			knownRegions = (en, Base,);
+			mainGroup = 1A000050;
+			packageReferences = (1A000091 /* XCRemoteSwiftPackageReference "Kingfisher" */,);
 			productRefGroup = 1A000040 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (
-				1A000080 /* SwingMusicApp */,
-			);
+			targets = (1A000080 /* SwingMusicApp */,);
 		};
 
 	};
