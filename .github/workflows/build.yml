@@ -6,27 +6,32 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Select Xcode 16.4
         run: sudo xcode-select -s /Applications/Xcode_16.4.app
 
+      - name: Show available SDKs
+        run: xcodebuild -showsdks
+
       - name: Build Archive
         run: |
-         xcodebuild archive \
-           -project SwingMusicApp.xcodeproj \
-           -scheme SwingMusicApp \
-           -destination "generic/platform=iOS" \
-           -sdk iphoneos17.5 \
-           -archivePath ./build/SwingMusicApp.xcarchive \
-           CODE_SIGNING_ALLOWED=NO \
-           AD_HOC_CODE_SIGNING_ALLOWED=YES
+          xcodebuild archive \
+            -project SwingMusicApp.xcodeproj \
+            -scheme SwingMusicApp \
+            -destination "generic/platform=iOS" \
+            -archivePath ./build/SwingMusicApp.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            | xcpretty || true
+
       - name: Export .app to .ipa
         run: |
+          APP_PATH=$(find ./build/SwingMusicApp.xcarchive/Products/Applications -name "*.app" | head -1)
           mkdir -p Payload
-          cp -r ./build/SwingMusicApp.xcarchive/Products/Applications/*.app ./Payload/
-          zip -r SwingMusicApp.ipa Payload
+          cp -r "$APP_PATH" Payload/
+          zip -r SwingMusicApp.ipa Payload/
 
-      - name: Upload Artifacts
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: iOS-Build
