@@ -18,7 +18,6 @@
   <key>CFBundleExecutable</key>
   <string>$(EXECUTABLE_NAME)</string>
 
-  <!-- App icon from Assets.xcassets/AppIcon.appiconset -->
   <key>CFBundleIconName</key>
   <string>AppIcon</string>
   <key>CFBundleIcons</key>
@@ -28,14 +27,26 @@
       <key>CFBundleIconName</key>
       <string>AppIcon</string>
       <key>CFBundleIconFiles</key>
-      <array>
-        <string>AppIcon</string>
-      </array>
+      <array><string>AppIcon</string></array>
     </dict>
   </dict>
 
+  <!--
+    ATS policy:
+    NSAllowsArbitraryLoads = true is required for the app to connect to
+    user-configured servers over HTTP. Swing Music runs on a self-hosted
+    server at any URL the user provides — we cannot whitelist specific domains.
+    The user explicitly acknowledges HTTP risk via the ATSWarningSheet before
+    any HTTP connection is made. HTTPS is always used when the URL starts with
+    https://.
+
+    NSAllowsLocalNetworking covers 192.168.x.x, 10.x.x.x, 172.16-31.x.x,
+    and *.local without requiring a TLS cert — essential for LAN servers.
+  -->
   <key>NSAppTransportSecurity</key>
   <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
     <key>NSAllowsLocalNetworking</key>
     <true/>
   </dict>
@@ -62,12 +73,7 @@
   </array>
 
   <key>UILaunchScreen</key>
-  <dict>
-    <key>UIColorName</key>
-    <string>AccentColor</string>
-    <key>UIImageName</key>
-    <string>AppIcon</string>
-  </dict>
+  <dict/>
 
   <key>MinimumOSVersion</key>
   <string>16.0</string>

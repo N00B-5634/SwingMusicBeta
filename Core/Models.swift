@@ -500,14 +500,25 @@ struct AllArtists: Codable {
     enum CodingKeys: String, CodingKey { case items, total }
 }
 
-// MARK: - Auth models (from auth DTOs)
+// MARK: - Auth models
+// Field names match the actual Swing Music API JSON responses.
+// Use the debug error helper in SwingAPIClient.getAllUsers to see raw
+// JSON if anything changes server-side.
+
 struct LogInResult: Codable {
-    let accessToken: String; let refreshToken: String
-    let maxAge: Int64; let msg: String
+    let accessToken: String
+    let refreshToken: String
+    let maxAge: Int64
+    let msg: String
+
+    // Swing Music server returns: accesstoken, refreshtoken, maxage, msg
     enum CodingKeys: String, CodingKey {
-        case accessToken = "accesstoken"; case refreshToken = "refreshtoken"
-        case maxAge = "maxage"; case msg
+        case accessToken  = "accesstoken"
+        case refreshToken = "refreshtoken"
+        case maxAge       = "maxage"
+        case msg
     }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         accessToken  = try c.decodeIfPresent(String.self, forKey: .accessToken)  ?? ""
@@ -517,13 +528,36 @@ struct LogInResult: Codable {
     }
 }
 
+// GET /auth/users response
+// { "users": [...], "settings": { "enableGuest": bool, "usersOnLogin": bool } }
 struct AllUsersResponse: Codable {
-    let users: [SwingUser]; let settings: ProfileSettings
+    let users: [SwingUser]
+    let settings: ProfileSettings
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        users    = try c.decodeIfPresent([SwingUser].self,    forKey: .users)    ?? []
+        settings = try c.decodeIfPresent(ProfileSettings.self, forKey: .settings)
+                   ?? ProfileSettings(enableGuest: false, usersOnLogin: false)
+    }
+    // Memberwise init for fallback parsing
+    init(users: [SwingUser], settings: ProfileSettings) {
+        self.users    = users
+        self.settings = settings
+    }
+
+    enum CodingKeys: String, CodingKey { case users, settings }
 }
 
 struct SwingUser: Identifiable, Codable {
-    let id: Int; let username: String; let firstname: String
-    let lastname: String; let email: String; let image: String; let roles: [String]
+    let id: Int
+    let username: String
+    let firstname: String
+    let lastname: String
+    let email: String
+    let image: String
+    let roles: [String]
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id        = try c.decodeIfPresent(Int.self,      forKey: .id)        ?? 0
@@ -534,16 +568,28 @@ struct SwingUser: Identifiable, Codable {
         image     = try c.decodeIfPresent(String.self,   forKey: .image)     ?? ""
         roles     = try c.decodeIfPresent([String].self, forKey: .roles)     ?? []
     }
-    enum CodingKeys: String, CodingKey { case id, username, firstname, lastname, email, image, roles }
+    enum CodingKeys: String, CodingKey {
+        case id, username, firstname, lastname, email, image, roles
+    }
 }
 
 struct ProfileSettings: Codable {
-    let enableGuest: Bool; let usersOnLogin: Bool
+    let enableGuest: Bool
+    let usersOnLogin: Bool
+
+    // Swing Music uses camelCase in JSON: enableGuest, usersOnLogin
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        enableGuest   = try c.decodeIfPresent(Bool.self, forKey: .enableGuest)   ?? false
-        usersOnLogin  = try c.decodeIfPresent(Bool.self, forKey: .usersOnLogin)  ?? false
+        enableGuest  = try c.decodeIfPresent(Bool.self, forKey: .enableGuest)  ?? false
+        usersOnLogin = try c.decodeIfPresent(Bool.self, forKey: .usersOnLogin) ?? false
     }
+
+    // Memberwise init for fallback when settings key is missing
+    init(enableGuest: Bool, usersOnLogin: Bool) {
+        self.enableGuest  = enableGuest
+        self.usersOnLogin = usersOnLogin
+    }
+
     enum CodingKeys: String, CodingKey { case enableGuest, usersOnLogin }
 }
 

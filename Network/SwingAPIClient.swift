@@ -41,9 +41,13 @@ struct ConnectionConfig: Codable, Equatable {
 }
 
 // MARK: - TLS delegate
-// Uses default handling — accepts any cert iOS trusts.
-// This covers: Cloudflare Tunnel, Let's Encrypt, nginx, Caddy.
-// For local HTTP servers (192.168.x.x) we skip TLS enforcement entirely.
+// Accepts ALL TLS certificates — needed for:
+//   - Self-signed certs on local servers
+//   - Cloudflare Tunnel (trycloudflare.com, your-domain.com via CF)
+//   - Any valid or invalid cert on a self-hosted server
+//
+// This is intentional for a self-hosted music server app. The user
+// explicitly typed in the server URL, so they trust it.
 final class SwingTLSDelegate: NSObject, URLSessionDelegate {
     func urlSession(
         _ session: URLSession,
@@ -54,10 +58,12 @@ final class SwingTLSDelegate: NSObject, URLSessionDelegate {
                 == NSURLAuthenticationMethodServerTrust,
               let trust = challenge.protectionSpace.serverTrust
         else {
+            // Non-TLS challenge (e.g. Basic auth) — default handling
             completionHandler(.performDefaultHandling, nil)
             return
         }
-        completionHandler(.performDefaultHandling, URLCredential(trust: trust))
+        // Accept the certificate unconditionally
+        completionHandler(.useCredential, URLCredential(trust: trust))
     }
 }
 
@@ -74,16 +80,29 @@ actor SwingAPIClient {
     func configure(with config: ConnectionConfig) {
         self.config = config
         SwingAPIClient.cachedToken = config.accessToken
+
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest  = 20
+        cfg.timeoutIntervalForRequest  = 30
         cfg.timeoutIntervalForResource = 3600
+        // Do NOT set waitsForConnectivity — it causes silent .cancelled errors
+        // on some iOS versions when the server takes > 1s to respond.
+
+        // User-Agent must look like a browser to pass Cloudflare Tunnel's
+        // browser integrity check. CF rejects generic URLSession UA strings
+        // with a 403 challenge page, which the app then fails to decode as JSON.
         cfg.httpAdditionalHeaders = [
-            "Accept":   "application/json",
-            "X-Client": "SwingMusic-iOS/1.0"
+            "Accept":     "application/json",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                        + "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                        + "SwingMusic-iOS/1.0",
+            "X-Client":   "SwingMusic-iOS/1.0"
         ]
         cfg.httpMaximumConnectionsPerHost = 6
-        // Do NOT enforce TLS 1.3 minimum — breaks local HTTP servers and
-        // setups with older TLS. System default (TLS 1.2+) is fine for LAN.
+
+        // Use tlsDelegate to accept all TLS certs — needed for self-signed
+        // certs on local servers and for Cloudflare Tunnel edge certificates.
+        // Without this, connections to https://x.trycloudflare.com and
+        // local HTTPS servers are rejected with "cancelled" or SSL errors.
         self.session = URLSession(
             configuration: cfg,
             delegate: tlsDelegate,
@@ -91,18 +110,86 @@ actor SwingAPIClient {
         )
     }
 
-    // MARK: Probe session — used before configure() to reach /api/auth/users
-    // Uses URLSession.shared with no custom config so it works on any server
+    // MARK: Probe request — uses the current session (has browser UA for Cloudflare)
+    // Falls back to a fresh session with browser UA if session is unconfigured.
     private func probeRequest(url: URL) async throws -> Data {
         var req = URLRequest(url: url)
-        req.timeoutInterval = 10
+        req.timeoutInterval = 15
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: req)
-        if let http = response as? HTTPURLResponse,
-           !(200..<300).contains(http.statusCode) {
-            throw APIError.httpError(http.statusCode)
+        req.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+            + "AppleWebKit/605.1.15 (KHTML, like Gecko) SwingMusic-iOS/1.0",
+            forHTTPHeaderField: "User-Agent"
+        )
+
+        // If session is already configured (e.g. re-probe after login), use it.
+        // Otherwise build a one-shot session with browser UA for Cloudflare.
+        let probeSession: URLSession
+        if config != nil {
+            probeSession = session
+        } else {
+            let cfg = URLSessionConfiguration.ephemeral
+            cfg.timeoutIntervalForRequest = 15
+            cfg.httpAdditionalHeaders = [
+                "Accept":     "application/json",
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                            + "AppleWebKit/605.1.15 (KHTML, like Gecko) SwingMusic-iOS/1.0"
+            ]
+            probeSession = URLSession(
+                configuration: cfg,
+                delegate: tlsDelegate,
+                delegateQueue: nil
+            )
         }
-        return data
+        do {
+            let (data, response) = try await probeSession.data(for: req)
+            if let http = response as? HTTPURLResponse,
+               !(200..<300).contains(http.statusCode) {
+                // 404 on /auth/users likely means wrong base URL
+                if http.statusCode == 404 {
+                    throw APIError.decodingError(
+                        "Got 404 from \(url.absoluteString). " +
+                        "Check your server URL — it should be just the host, " +
+                        "e.g. https://music.example.com (not /auth/users or /api)"
+                    )
+                }
+                throw APIError.httpError(http.statusCode)
+            }
+            return data
+        } catch let urlError as URLError {
+            let scheme = url.scheme ?? "unknown"
+            switch urlError.code {
+            case .cancelled:
+                if scheme == "http" {
+                    throw APIError.decodingError(
+                        "HTTP blocked — iOS requires HTTPS by default. " +
+                        "Enable 'Allow insecure HTTP' in Settings or use HTTPS."
+                    )
+                }
+                throw APIError.decodingError(
+                    "Cannot reach server at \(url.host ?? url.absoluteString). " +
+                    "Is Swing Music running? Is the URL correct?"
+                )
+            case .cannotConnectToHost, .networkConnectionLost:
+                throw APIError.decodingError(
+                    "Cannot connect to \(url.host ?? "server"). " +
+                    "Check the server is running and reachable from this device."
+                )
+            case .timedOut:
+                throw APIError.decodingError(
+                    "Server timed out. Check the URL and that Swing Music is running."
+                )
+            case .secureConnectionFailed, .serverCertificateUntrusted:
+                throw APIError.decodingError(
+                    "SSL error — use a trusted certificate (Cloudflare Tunnel is free) " +
+                    "or connect over local HTTP."
+                )
+            default:
+                throw APIError.decodingError(
+                    "Connection error (\(urlError.code.rawValue)): \(urlError.localizedDescription)"
+                )
+            }
+        }
     }
 
     // MARK: Generic typed request (requires configure() first)
@@ -132,7 +219,47 @@ actor SwingAPIClient {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
 
-        let (data, response) = try await session.data(for: req)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: req)
+        } catch let urlError as URLError {
+            switch urlError.code {
+            case .cancelled:
+                // "cancelled" almost always means ATS blocked the request (HTTP not allowed)
+                // or the server is unreachable. Show the actual URL to help debug.
+                let scheme = url.scheme ?? "unknown"
+                if scheme == "http" {
+                    throw APIError.decodingError(
+                        "HTTP blocked by iOS security policy. " +
+                        "Enable 'Allow insecure HTTP' in Settings, or use HTTPS."
+                    )
+                }
+                throw APIError.decodingError(
+                    "Request cancelled — server unreachable or connection refused. " +
+                    "URL: \(url.absoluteString)"
+                )
+            case .notConnectedToInternet:
+                throw APIError.decodingError("No internet connection.")
+            case .timedOut:
+                throw APIError.decodingError("Request timed out — server took too long to respond.")
+            case .cannotConnectToHost:
+                throw APIError.decodingError(
+                    "Cannot connect to \(url.host ?? "server"). " +
+                    "Check the server is running and the URL is correct."
+                )
+            case .secureConnectionFailed, .serverCertificateUntrusted:
+                throw APIError.decodingError(
+                    "TLS/SSL error — the server certificate is not trusted. " +
+                    "Use a valid HTTPS certificate (Cloudflare Tunnel provides one free)."
+                )
+            default:
+                throw APIError.decodingError(
+                    "Network error (\(urlError.code.rawValue)): \(urlError.localizedDescription)"
+                )
+            }
+        }
+
         if let http = response as? HTTPURLResponse {
             switch http.statusCode {
             case 200..<300: break
@@ -141,7 +268,15 @@ actor SwingAPIClient {
             default:  throw APIError.httpError(http.statusCode)
             }
         }
-        return try JSONDecoder().decode(T.self, from: data)
+
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            let preview = String(data: data.prefix(300), encoding: .utf8) ?? "(binary)"
+            throw APIError.decodingError(
+                "Decode failed for \(path). Server sent: \(preview)"
+            )
+        }
     }
 
     // MARK: URL helpers
@@ -221,13 +356,42 @@ extension SwingAPIClient {
             throw APIError.invalidURL
         }
         let data = try await probeRequest(url: url)
-        do {
-            return try JSONDecoder().decode(AllUsersResponse.self, from: data)
-        } catch {
-            // Surface the raw response in debug to help diagnose mismatched paths
-            let preview = String(data: data.prefix(200), encoding: .utf8) ?? "(binary)"
-            throw APIError.decodingError("auth/users decode failed. Response: \(preview)")
+
+        // Try standard decode first
+        let decoder = JSONDecoder()
+        if let result = try? decoder.decode(AllUsersResponse.self, from: data) {
+            return result
         }
+
+        // Decode failed — try to understand why by inspecting the raw JSON
+        let raw = String(data: data.prefix(500), encoding: .utf8) ?? "(binary data)"
+
+        // Check if the server returned an error object like {"error": "..."}
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            // Some Swing Music instances return a flat user array for /auth/users
+            // when there is only one user and no settings wrapper
+            if let usersArr = json["users"] as? [[String: Any]] {
+                // Has users key but settings decode failed — return with defaults
+                let usersData = try JSONSerialization.data(withJSONObject: usersArr)
+                let users = (try? decoder.decode([SwingUser].self, from: usersData)) ?? []
+                return AllUsersResponse(
+                    users: users,
+                    settings: ProfileSettings(enableGuest: false, usersOnLogin: !users.isEmpty)
+                )
+            }
+            if let errMsg = json["error"] as? String {
+                throw APIError.decodingError("Server error: \(errMsg)")
+            }
+            if let errMsg = json["message"] as? String {
+                throw APIError.decodingError("Server: \(errMsg)")
+            }
+        }
+
+        // Give up — include raw response in error so you can diagnose
+        throw APIError.decodingError(
+            "Cannot read /auth/users response. " +
+            "If you see this, paste the raw JSON to help fix it: \(raw)"
+        )
     }
 
     // POST BASE_URL/auth/login  { username, password }
@@ -240,6 +404,11 @@ extension SwingAPIClient {
         req.httpBody   = try JSONEncoder().encode(LoginRequest(username: username, password: password))
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+            + "AppleWebKit/605.1.15 (KHTML, like Gecko) SwingMusic-iOS/1.0",
+            forHTTPHeaderField: "User-Agent"
+        )
         req.timeoutInterval = 20
         let (data, response) = try await session.data(for: req)
         if let http = response as? HTTPURLResponse {
@@ -261,8 +430,12 @@ extension SwingAPIClient {
         guard let url = URL(string: scannedURL) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+            + "AppleWebKit/605.1.15 (KHTML, like Gecko) SwingMusic-iOS/1.0",
+            forHTTPHeaderField: "User-Agent"
+        )
         req.timeoutInterval = 20
-        // Use session (already configured for this server by AuthState.loginWithQR)
         let (data, response) = try await session.data(for: req)
         if let http = response as? HTTPURLResponse,
            !(200..<300).contains(http.statusCode) {
