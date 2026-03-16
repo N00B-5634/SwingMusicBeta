@@ -8,19 +8,18 @@ struct ConnectionConfig: Codable, Equatable {
     var refreshToken: String?
     var allowsInsecureHTTP: Bool = false
 
-    // API base URL — all request() calls append paths to this.
-    // e.g. rawURL=https://host → baseURL=https://host/api/
+    // API base URL — Swing Music routes live at the server root, not under /api/.
+    // e.g. rawURL=https://host → baseURL=https://host/
+    //   folder endpoint: https://host/folder
+    //   albums endpoint: https://host/albums
+    // Auth endpoints also live at root: https://host/auth/users
     var baseURL: URL? {
-        let s = rawURL.hasSuffix("/") ? rawURL : rawURL + "/"
-        return URL(string: s + "api/")
-    }
-
-    // Server root — for auth endpoints (/auth/...) and images (/img/...)
-    // which live outside /api/.
-    var rootURL: URL? {
         let s = rawURL.hasSuffix("/") ? rawURL : rawURL + "/"
         return URL(string: s)
     }
+
+    // Alias for image/stream URLs — same as baseURL for Swing Music
+    var rootURL: URL? { baseURL }
 
     var isHTTPS: Bool { rawURL.lowercased().hasPrefix("https://") }
 
@@ -268,6 +267,16 @@ actor SwingAPIClient {
             case 200..<300: break
             case 401: throw APIError.unauthorized
             case 404: throw APIError.notFound
+            case 403: throw APIError.decodingError(
+                    "403 Forbidden — if using Cloudflare Tunnel, make sure " +
+                    "'Browser Integrity Check' is disabled in the tunnel settings, " +
+                    "or add an Access bypass rule for your IP."
+                )
+            case 405: throw APIError.decodingError(
+                    "405 Method Not Allowed at \(url.absoluteString). " +
+                    "Check the server URL is the Swing Music root (e.g. https://music.example.com) " +
+                    "with no trailing path. If using Cloudflare, try disabling WAF rules."
+                )
             default:  throw APIError.httpError(http.statusCode)
             }
         }
@@ -308,7 +317,7 @@ actor SwingAPIClient {
     nonisolated func streamURLSync(trackHash: String) -> URL? {
         guard let raw = UserDefaults.standard.string(forKey: "swing_server_url") else { return nil }
         let base = raw.hasSuffix("/") ? raw : raw + "/"
-        guard let baseURL = URL(string: base + "api/") else { return nil }
+        guard let baseURL = URL(string: base) else { return nil }
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("stream/\(trackHash)"),
             resolvingAgainstBaseURL: false
