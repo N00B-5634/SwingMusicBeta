@@ -564,9 +564,7 @@ extension SwingAPIClient {
             body: ToggleFavoriteRequest(hash: hash, type: type))
     }
 
-    func getFavorites() async throws -> FavoritesResponse {
-        try await request(path: "favorites")
-    }
+
 
     // ── Playlists ─────────────────────────────────────────────────────────────
     // GET  /playlists
@@ -607,9 +605,7 @@ extension SwingAPIClient {
         try await request(path: "nothome/recents/added")
     }
 
-    func getHomepage() async throws -> HomepageResponse {
-        try await request(path: "nothome/")
-    }
+
 
     // ── Track logger ──────────────────────────────────────────────────────────
     // POST /logger/track/log
@@ -632,11 +628,7 @@ extension SwingAPIClient {
     // ── Lyrics ────────────────────────────────────────────────────────────────
     // POST /lyrics
 
-    func getLyrics(trackHash: String, filepath: String) async throws -> LyricsServerResponse {
-        struct LyricsBody: Encodable { let trackhash: String; let filepath: String }
-        return try await request(path: "lyrics", method: "POST",
-            body: LyricsBody(trackhash: trackHash, filepath: filepath))
-    }
+
 }
 private struct EmptyBody: Codable {}
 
