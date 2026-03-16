@@ -139,7 +139,7 @@ final class PlayerState: ObservableObject {
         playbackState = .buffering
         teardown()
 
-        guard let url = SwingAPIClient.shared.streamURLSync(trackHash: track.trackHash) else {
+        guard let url = SwingAPIClient.shared.streamURLSync(trackHash: track.trackHash, filepath: track.filepath) else {
             playbackState = .error; isBuffering = false; return
         }
 

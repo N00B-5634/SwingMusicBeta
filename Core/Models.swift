@@ -733,3 +733,34 @@ struct SaveQueueRequest: Encodable {
         case trackhashes; case currentIndex = "current_index"
     }
 }
+
+// MARK: - Additional response types
+
+struct FavoritesResponse: Codable {
+    let tracks: [Track]
+    let albums: [Album]
+    let artists: [Artist]
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tracks  = try c.decodeIfPresent([Track].self,  forKey: .tracks)  ?? []
+        albums  = try c.decodeIfPresent([Album].self,  forKey: .albums)  ?? []
+        artists = try c.decodeIfPresent([Artist].self, forKey: .artists) ?? []
+    }
+    enum CodingKeys: String, CodingKey { case tracks, albums, artists }
+}
+
+struct HomepageResponse: Codable {
+    // Dynamic shape — ignored for now, HomeView fetches separately
+    init(from decoder: Decoder) throws {}
+}
+
+struct LyricsServerResponse: Codable {
+    let synced: Bool
+    let copyright: String
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        synced    = try c.decodeIfPresent(Bool.self,   forKey: .synced)    ?? false
+        copyright = try c.decodeIfPresent(String.self, forKey: .copyright) ?? ""
+    }
+    enum CodingKeys: String, CodingKey { case synced, copyright }
+}

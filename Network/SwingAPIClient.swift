@@ -692,4 +692,24 @@ enum APIError: LocalizedError {
         case .decodingError(let m): return "Response error: \(m)"
         }
     }
+    // ── Favorites ─────────────────────────────────────────────────────────────
+
+    func getFavorites() async throws -> FavoritesResponse {
+        try await request(path: "favorites")
+    }
+
+    // ── Homepage ──────────────────────────────────────────────────────────────
+
+    func getHomepage() async throws -> HomepageResponse {
+        try await request(path: "nothome/")
+    }
+
+    // ── Lyrics ────────────────────────────────────────────────────────────────
+
+    func getLyrics(trackHash: String, filepath: String) async throws -> LyricsServerResponse {
+        struct LyricsBody: Encodable { let trackhash: String; let filepath: String }
+        return try await request(path: "lyrics", method: "POST",
+            body: LyricsBody(trackhash: trackHash, filepath: filepath))
+    }
+
 }

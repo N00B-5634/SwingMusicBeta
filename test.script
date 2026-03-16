@@ -1,0 +1,24 @@
+BASE="http://192.168.1.217:1970"
+
+echo "=== 1. GET /auth/users ==="
+curl -s -o /tmp/r1.json -w "HTTP %{http_code}" "$BASE/auth/users"
+echo && cat /tmp/r1.json | head -c 300
+
+echo ""
+echo "=== 2. POST /folder (no token, no auth) ==="
+curl -s -o /tmp/r2.json -w "HTTP %{http_code}" \
+  -X POST "$BASE/folder" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"folder":"$home","start":0,"limit":50,"tracks_only":false}'
+echo && cat /tmp/r2.json | head -c 300
+
+echo ""
+echo "=== 3. POST /folder with bad token ==="
+curl -s -o /tmp/r3.json -w "HTTP %{http_code}" \
+  -X POST "$BASE/folder" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer FAKE_TOKEN" \
+  -d '{"folder":"$home","start":0,"limit":50,"tracks_only":false}'
+echo && cat /tmp/r3.json | head -c 300
