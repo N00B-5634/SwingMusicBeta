@@ -212,7 +212,10 @@ actor SwingAPIClient {
         var req = URLRequest(url: url)
         req.httpMethod = method
         if let token = config.accessToken {
+            // Swing Music accepts both Bearer header and cookie-based auth
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            // Also send as cookie - server uses access_token_cookie
+            req.setValue("access_token_cookie=\(token)", forHTTPHeaderField: "Cookie")
         }
         if let body {
             req.httpBody = try JSONEncoder().encode(body)
@@ -495,10 +498,9 @@ extension SwingAPIClient {
         ])
     }
 
-    // POST /api/albums/:hash
+    // GET /api/albums/:hash
     func getAlbumWithInfo(albumHash: String) async throws -> AlbumWithInfo {
-        try await request(path: "albums/\(albumHash)", method: "POST",
-            body: AlbumHashRequest(albumhash: albumHash))
+        try await request(path: "albums/\(albumHash)")
     }
 
     // GET /api/albums/:hash/tracks
