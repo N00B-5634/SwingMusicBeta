@@ -292,15 +292,20 @@ actor SwingAPIClient {
     }
 
     // MARK: URL helpers
-    func streamURL(trackHash: String) -> URL? {
+    // GET /file/<trackhash>/legacy?filepath=<path>
+    // The server needs filepath to find the file — we pass trackhash as filepath
+    // fallback since we don't always have the full path client-side.
+    func streamURL(trackHash: String, filepath: String = "") -> URL? {
         guard let base = config?.baseURL else { return nil }
         var comps = URLComponents(
-            url: base.appendingPathComponent("stream/\(trackHash)"),
+            url: base.appendingPathComponent("file/\(trackHash)/legacy"),
             resolvingAgainstBaseURL: false
         )
+        var items = [URLQueryItem(name: "filepath", value: filepath.isEmpty ? trackHash : filepath)]
         if let token = config?.accessToken {
-            comps?.queryItems = [URLQueryItem(name: "token", value: token)]
+            items.append(URLQueryItem(name: "token", value: token))
         }
+        comps?.queryItems = items
         return comps?.url
     }
 
@@ -314,17 +319,19 @@ actor SwingAPIClient {
         return URL(string: base)?.appendingPathComponent(path)
     }
 
-    nonisolated func streamURLSync(trackHash: String) -> URL? {
+    nonisolated func streamURLSync(trackHash: String, filepath: String = "") -> URL? {
         guard let raw = UserDefaults.standard.string(forKey: "swing_server_url") else { return nil }
         let base = raw.hasSuffix("/") ? raw : raw + "/"
         guard let baseURL = URL(string: base) else { return nil }
         var comps = URLComponents(
-            url: baseURL.appendingPathComponent("stream/\(trackHash)"),
+            url: baseURL.appendingPathComponent("file/\(trackHash)/legacy"),
             resolvingAgainstBaseURL: false
         )
+        var items = [URLQueryItem(name: "filepath", value: filepath.isEmpty ? trackHash : filepath)]
         if let token = SwingAPIClient.cachedToken {
-            comps?.queryItems = [URLQueryItem(name: "token", value: token)]
+            items.append(URLQueryItem(name: "token", value: token))
         }
+        comps?.queryItems = items
         return comps?.url
     }
 
@@ -344,70 +351,50 @@ actor SwingAPIClient {
 }
 
 // MARK: - All Swing Music API endpoints
-// Base: /api/  (e.g. https://host/api/auth/users)
-// Images: /img/ (e.g. https://host/img/thumbnail/small/hash.webp)
+// Actual Swing Music route map (confirmed from Python source):
+//
+//   /auth/...         auth
+//   /folder           POST  folders + tracks
+//   /album            POST  album info + tracks  (NOT /albums)
+//   /album/<h>/tracks GET   album tracks
+//   /artist/<h>       GET   artist info
+//   /getall/albums    GET   paginated album list  (NOT /albums)
+//   /getall/artists   GET   paginated artist list (NOT /artists)
+//   /search/top       GET   top search results   (NOT /search)
+//   /search/          GET   itemtype search
+//   /file/<h>/legacy  GET   audio stream         (NOT /stream)
+//   /favorites        GET/POST
+//   /playlists        GET/POST
+//   /logger/track/log POST  scrobble
+//   /nothome/recents/played GET recently played
+//   /img/...          images
+//   /notsettings      settings
+//   /lyrics           POST  lyrics
+//   /colors/album/<h> GET   album color
+
 extension SwingAPIClient {
 
     // ── Auth ─────────────────────────────────────────────────────────────────
-    //
-    // Endpoints (no /api/ prefix — request() adds it via baseURL):
-    //   GET  /auth/users              — probe: returns users + settings
-    //   POST /auth/login              — username + password → LogInResult
-    //   GET  /auth/pair?code=CODE     — QR code → LogInResult
-    //   POST /auth/logout             — invalidate session
-    //   POST /auth/token/refresh      — refresh token → LogInResult
-    //
-    // Note: probe calls happen BEFORE configure(), so they use a fresh
-    // URLSession built from the raw URL rather than the stored session.
 
-    // GET BASE_URL/auth/users
-    // Called before configure() — uses a fresh session for the given URL.
     func getAllUsers(rawURL: String) async throws -> AllUsersResponse {
         let base = rawURL.hasSuffix("/") ? rawURL : rawURL + "/"
-        guard let url = URL(string: base + "auth/users") else {
-            throw APIError.invalidURL
-        }
+        guard let url = URL(string: base + "auth/users") else { throw APIError.invalidURL }
         let data = try await probeRequest(url: url)
-
-        // Try standard decode first
         let decoder = JSONDecoder()
-        if let result = try? decoder.decode(AllUsersResponse.self, from: data) {
-            return result
-        }
-
-        // Decode failed — try to understand why by inspecting the raw JSON
-        let raw = String(data: data.prefix(500), encoding: .utf8) ?? "(binary data)"
-
-        // Check if the server returned an error object like {"error": "..."}
+        if let result = try? decoder.decode(AllUsersResponse.self, from: data) { return result }
+        let raw = String(data: data.prefix(500), encoding: .utf8) ?? "(binary)"
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            // Some Swing Music instances return a flat user array for /auth/users
-            // when there is only one user and no settings wrapper
             if let usersArr = json["users"] as? [[String: Any]] {
-                // Has users key but settings decode failed — return with defaults
                 let usersData = try JSONSerialization.data(withJSONObject: usersArr)
                 let users = (try? decoder.decode([SwingUser].self, from: usersData)) ?? []
-                return AllUsersResponse(
-                    users: users,
-                    settings: ProfileSettings(enableGuest: false, usersOnLogin: !users.isEmpty)
-                )
+                return AllUsersResponse(users: users,
+                    settings: ProfileSettings(enableGuest: false, usersOnLogin: !users.isEmpty))
             }
-            if let errMsg = json["error"] as? String {
-                throw APIError.decodingError("Server error: \(errMsg)")
-            }
-            if let errMsg = json["message"] as? String {
-                throw APIError.decodingError("Server: \(errMsg)")
-            }
+            if let msg = json["error"] as? String { throw APIError.decodingError("Server: \(msg)") }
         }
-
-        // Give up — include raw response in error so you can diagnose
-        throw APIError.decodingError(
-            "Cannot read /auth/users response. " +
-            "If you see this, paste the raw JSON to help fix it: \(raw)"
-        )
+        throw APIError.decodingError("Cannot read /auth/users. Raw: \(raw)")
     }
 
-    // POST BASE_URL/auth/login  { username, password }
-    // Session must be configured first (probe() does this).
     func loginWithPassword(baseURL: String, username: String, password: String) async throws -> LogInResult {
         let base = baseURL.hasSuffix("/") ? baseURL : baseURL + "/"
         guard let url = URL(string: base + "auth/login") else { throw APIError.invalidURL }
@@ -416,11 +403,8 @@ extension SwingAPIClient {
         req.httpBody   = try JSONEncoder().encode(LoginRequest(username: username, password: password))
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
-            + "AppleWebKit/605.1.15 (KHTML, like Gecko) SwingMusic-iOS/1.0",
-            forHTTPHeaderField: "User-Agent"
-        )
+        req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 SwingMusic-iOS/1.0",
+                     forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 20
         let (data, response) = try await session.data(for: req)
         if let http = response as? HTTPURLResponse {
@@ -434,35 +418,27 @@ extension SwingAPIClient {
         return try JSONDecoder().decode(LogInResult.self, from: data)
     }
 
-    // GET BASE_URL/auth/pair?code=CODE
-    // scannedURL is the full URL from the QR code, e.g.:
-    //   http://192.168.1.10:1970/auth/pair?code=XXXXXX
-    // We call it directly — the server returns LogInResult.
+    // GET BASE_URL/auth/pair?code=CODE  (full URL from QR code)
     func loginWithQRURL(scannedURL: String) async throws -> LogInResult {
         guard let url = URL(string: scannedURL) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
-            + "AppleWebKit/605.1.15 (KHTML, like Gecko) SwingMusic-iOS/1.0",
-            forHTTPHeaderField: "User-Agent"
-        )
+        req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 SwingMusic-iOS/1.0",
+                     forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 20
         let (data, response) = try await session.data(for: req)
-        if let http = response as? HTTPURLResponse,
-           !(200..<300).contains(http.statusCode) {
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw APIError.httpError(http.statusCode)
         }
         return try JSONDecoder().decode(LogInResult.self, from: data)
     }
 
-    // POST BASE_URL/auth/token/refresh
-    // Authorization: Bearer <refreshToken>
+    // POST /auth/refresh  — send refresh token as Bearer header
     func refreshTokens() async throws -> LogInResult {
         guard let cfg = config,
               let refresh = cfg.refreshToken,
               let base = cfg.rootURL,
-              let url = URL(string: base.absoluteString + "auth/token/refresh")
+              let url = URL(string: base.absoluteString + "auth/refresh")
         else { throw APIError.notConfigured }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -470,58 +446,39 @@ extension SwingAPIClient {
         req.setValue("application/json",   forHTTPHeaderField: "Accept")
         req.timeoutInterval = 20
         let (data, response) = try await session.data(for: req)
-        if let http = response as? HTTPURLResponse,
-           !(200..<300).contains(http.statusCode) {
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw APIError.httpError(http.statusCode)
         }
         return try JSONDecoder().decode(LogInResult.self, from: data)
     }
 
-    // POST BASE_URL/auth/logout
     func logout() async throws {
-        let _: EmptyBody = try await request(path: "auth/logout", method: "POST")
+        let _: EmptyBody = try await request(path: "auth/logout", method: "GET")
     }
 
-    // ── Folders ──────────────────────────────────────────────────────────────
+    // ── Folders ───────────────────────────────────────────────────────────────
+    // POST /folder
 
-    // POST /api/folder
     func getFoldersAndTracks(folder: String, start: Int, limit: Int, tracksOnly: Bool = false) async throws -> FoldersAndTracks {
         try await request(path: "folder", method: "POST",
             body: FoldersAndTracksRequest(folder: folder, tracksOnly: tracksOnly, limit: limit, start: start))
     }
 
-    // GET /api/folder/root-dirs
-    func getRootDirectories() async throws -> RootDirs {
-        try await request(path: "folder/root-dirs")
-    }
+    // ── Albums ────────────────────────────────────────────────────────────────
+    // POST /album  — returns album info + tracks
+    // GET  /getall/albums — paginated list of all albums
 
-    // ── Albums ───────────────────────────────────────────────────────────────
-
-    // GET /api/albums
-    func getAllAlbums(start: Int, limit: Int = 20, sortBy: SortBy = .title, sortOrder: SortOrder = .ascending) async throws -> AllAlbums {
-        try await request(path: "albums", queryItems: [
-            .init(name: "start",   value: "\(start)"),
-            .init(name: "limit",   value: "\(limit)"),
-            .init(name: "sortby",  value: sortBy.rawValue),
-            .init(name: "reverse", value: sortOrder == .descending ? "1" : "0")
-        ])
-    }
-
-    // GET /api/albums/:hash
     func getAlbumWithInfo(albumHash: String) async throws -> AlbumWithInfo {
-        try await request(path: "albums/\(albumHash)")
+        try await request(path: "album", method: "POST",
+            body: AlbumHashRequest(albumhash: albumHash))
     }
 
-    // GET /api/albums/:hash/tracks
     func getAlbumTracks(albumHash: String) async throws -> [Track] {
-        try await request(path: "albums/\(albumHash)/tracks")
+        try await request(path: "album/\(albumHash)/tracks")
     }
 
-    // ── Artists ──────────────────────────────────────────────────────────────
-
-    // GET /api/artists
-    func getAllArtists(start: Int, limit: Int = 20, sortBy: SortBy = .name, sortOrder: SortOrder = .ascending) async throws -> AllArtists {
-        try await request(path: "artists", queryItems: [
+    func getAllAlbums(start: Int, limit: Int = 20, sortBy: SortBy = .title, sortOrder: SortOrder = .ascending) async throws -> AllAlbums {
+        try await request(path: "getall/albums", queryItems: [
             .init(name: "start",   value: "\(start)"),
             .init(name: "limit",   value: "\(limit)"),
             .init(name: "sortby",  value: sortBy.rawValue),
@@ -529,131 +486,158 @@ extension SwingAPIClient {
         ])
     }
 
-    // GET /api/artists/:hash
+    // ── Artists ───────────────────────────────────────────────────────────────
+    // GET /artist/<hash>         — single artist info
+    // GET /getall/artists        — paginated list of all artists
+
     func getArtistInfo(artistHash: String) async throws -> ArtistInfo {
-        try await request(path: "artists/\(artistHash)", queryItems: [
-            .init(name: "tracklimit", value: "-1"),
-            .init(name: "all",        value: "true")
+        try await request(path: "artist/\(artistHash)", queryItems: [
+            .init(name: "tracklimit", value: "5"),
+            .init(name: "albumlimit", value: "7")
         ])
     }
 
-    // GET /api/artists/:hash/similar
     func getSimilarArtists(artistHash: String) async throws -> [Artist] {
-        try await request(path: "artists/\(artistHash)/similar")
+        try await request(path: "artist/\(artistHash)/similar")
     }
 
-    // GET /api/artists/:hash/tracks
     func getArtistTracks(artistHash: String) async throws -> [Track] {
-        try await request(path: "artists/\(artistHash)/tracks")
+        try await request(path: "artist/\(artistHash)/tracks")
     }
 
-    // ── Search ───────────────────────────────────────────────────────────────
+    func getAllArtists(start: Int, limit: Int = 20, sortBy: SortBy = .name, sortOrder: SortOrder = .ascending) async throws -> AllArtists {
+        try await request(path: "getall/artists", queryItems: [
+            .init(name: "start",   value: "\(start)"),
+            .init(name: "limit",   value: "\(limit)"),
+            .init(name: "sortby",  value: sortBy.rawValue),
+            .init(name: "reverse", value: sortOrder == .descending ? "1" : "0")
+        ])
+    }
 
-    // GET /api/search?q=&limit=
+    // ── Search ────────────────────────────────────────────────────────────────
+    // GET /search/top?q=&limit=   — top results (tracks + albums + artists)
+    // GET /search/?q=&itemtype=   — load more of a specific type
+
     func getTopSearchResults(query: String, limit: Int = 5) async throws -> TopSearchResults {
-        try await request(path: "search", queryItems: [
+        try await request(path: "search/top", queryItems: [
             .init(name: "q",     value: query),
             .init(name: "limit", value: "\(limit)")
         ])
     }
 
-    func searchTracks(query: String, limit: Int = -1) async throws -> TracksSearchResult {
-        try await request(path: "search", queryItems: [
+    func searchTracks(query: String, limit: Int = 30) async throws -> TracksSearchResult {
+        try await request(path: "search/", queryItems: [
             .init(name: "q",        value: query),
             .init(name: "limit",    value: "\(limit)"),
             .init(name: "itemtype", value: "tracks")
         ])
     }
 
-    func searchAlbums(query: String, limit: Int = -1) async throws -> AlbumsSearchResult {
-        try await request(path: "search", queryItems: [
+    func searchAlbums(query: String, limit: Int = 30) async throws -> AlbumsSearchResult {
+        try await request(path: "search/", queryItems: [
             .init(name: "q",        value: query),
             .init(name: "limit",    value: "\(limit)"),
             .init(name: "itemtype", value: "albums")
         ])
     }
 
-    func searchArtists(query: String, limit: Int = -1) async throws -> ArtistsSearchResult {
-        try await request(path: "search", queryItems: [
+    func searchArtists(query: String, limit: Int = 30) async throws -> ArtistsSearchResult {
+        try await request(path: "search/", queryItems: [
             .init(name: "q",        value: query),
             .init(name: "limit",    value: "\(limit)"),
             .init(name: "itemtype", value: "artists")
         ])
     }
 
-    // ── Favorites ────────────────────────────────────────────────────────────
+    // ── Favorites ─────────────────────────────────────────────────────────────
+    // POST /favorites/add
+    // POST /favorites/remove
+    // GET  /favorites
 
-    // POST /api/favorites/add
     func addFavorite(hash: String, type: String) async throws {
         let _: EmptyBody = try await request(path: "favorites/add", method: "POST",
             body: ToggleFavoriteRequest(hash: hash, type: type))
     }
 
-    // POST /api/favorites/remove
     func removeFavorite(hash: String, type: String) async throws {
         let _: EmptyBody = try await request(path: "favorites/remove", method: "POST",
             body: ToggleFavoriteRequest(hash: hash, type: type))
     }
 
-    // GET /api/favorites  — type: tracks | albums | artists
-    func getFavorites(type: String = "tracks") async throws -> [Track] {
-        try await request(path: "favorites", queryItems: [
-            .init(name: "type", value: type)
-        ])
+    func getFavorites() async throws -> FavoritesResponse {
+        try await request(path: "favorites")
     }
 
-    // ── Playlists ────────────────────────────────────────────────────────────
+    // ── Playlists ─────────────────────────────────────────────────────────────
+    // GET  /playlists
+    // GET  /playlists/<id>
+    // POST /playlists/new
 
-    // GET /api/playlists
     func getPlaylists() async throws -> PlaylistsResponse {
         try await request(path: "playlists")
     }
 
-    // GET /api/playlists/:id
     func getPlaylist(id: Int) async throws -> PlaylistWithTracks {
         try await request(path: "playlists/\(id)")
     }
 
-    // POST /api/playlists/new
     func createPlaylist(name: String) async throws -> Playlist {
         try await request(path: "playlists/new", method: "POST",
             body: CreatePlaylistRequest(name: name))
     }
 
-    // POST /api/playlists/:id/add
     func addToPlaylist(id: Int, trackHashes: [String]) async throws {
+        struct AddBody: Encodable {
+            let itemtype = "tracks"
+            let itemhash: String
+        }
+        let hashes = trackHashes.joined(separator: ",")
         let _: EmptyBody = try await request(path: "playlists/\(id)/add", method: "POST",
-            body: PlaylistTracksRequest(trackhashes: trackHashes))
+            body: AddBody(itemhash: hashes))
     }
 
-    // ── Recently played / Queue ───────────────────────────────────────────────
+    // ── Recently played ───────────────────────────────────────────────────────
+    // GET /nothome/recents/played   — recently played items
 
-    // GET /api/recents/tracks
     func getRecentlyPlayed() async throws -> RecentlyPlayedResponse {
-        try await request(path: "recents")
+        try await request(path: "nothome/recents/played")
     }
 
-    // GET /api/queue
-    func getSavedQueue() async throws -> QueueResponse {
-        try await request(path: "queue")
+    func getRecentlyAdded() async throws -> RecentlyPlayedResponse {
+        try await request(path: "nothome/recents/added")
     }
 
-    // POST /api/queue/update
-    func saveQueue(hashes: [String], currentIndex: Int) async throws {
-        let _: EmptyBody = try await request(path: "queue/update", method: "POST",
-            body: SaveQueueRequest(trackhashes: hashes, currentIndex: currentIndex))
+    func getHomepage() async throws -> HomepageResponse {
+        try await request(path: "nothome/")
     }
 
     // ── Track logger ──────────────────────────────────────────────────────────
+    // POST /logger/track/log
 
-    // POST /api/logger/track/log
     func logTrack(trackHash: String, duration: Int, source: String) async throws {
         let ts = Int64(Date().timeIntervalSince1970)
         let _: EmptyBody = try await request(path: "logger/track/log", method: "POST",
             body: LogTrackRequest(duration: duration, source: source, timestamp: ts, trackHash: trackHash))
     }
-}
 
+    // ── Colors ────────────────────────────────────────────────────────────────
+    // GET /colors/album/<hash>
+
+    func getAlbumColor(albumHash: String) async throws -> String {
+        struct ColorResponse: Decodable { let color: String }
+        let r: ColorResponse = try await request(path: "colors/album/\(albumHash)")
+        return r.color
+    }
+
+    // ── Lyrics ────────────────────────────────────────────────────────────────
+    // POST /lyrics
+
+    func getLyrics(trackHash: String, filepath: String) async throws -> LyricsResponse {
+        struct LyricsBody: Encodable { let trackhash: String; let filepath: String }
+        return try await request(path: "lyrics", method: "POST",
+            body: LyricsBody(trackhash: trackHash, filepath: filepath))
+    }
+}
 private struct EmptyBody: Codable {}
 
 // MARK: - Lyrics client (lrclib.net)
