@@ -108,7 +108,7 @@ final class AuthState: ObservableObject {
         // Parse the scanned URL to extract the base server URL
         guard let url = URL(string: scannedURL),
               let host = url.host else {
-            return "Invalid QR code — could not parse URL"
+            return "Invalid QR code"
         }
         let scheme = url.scheme ?? "http"
         let port   = url.port.map { ":\($0)" } ?? ""
