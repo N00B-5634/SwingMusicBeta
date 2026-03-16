@@ -632,7 +632,7 @@ extension SwingAPIClient {
     // ── Lyrics ────────────────────────────────────────────────────────────────
     // POST /lyrics
 
-    func getLyrics(trackHash: String, filepath: String) async throws -> LyricsResponse {
+    func getLyrics(trackHash: String, filepath: String) async throws -> LyricsServerResponse {
         struct LyricsBody: Encodable { let trackhash: String; let filepath: String }
         return try await request(path: "lyrics", method: "POST",
             body: LyricsBody(trackhash: trackHash, filepath: filepath))
