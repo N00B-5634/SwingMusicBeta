@@ -672,26 +672,6 @@ actor LyricsClient {
 private struct LyricsResponse: Codable {
     let syncedLyrics: String?
     let plainLyrics:  String?
-}
-
-// MARK: - Errors
-enum APIError: LocalizedError {
-    case notConfigured, invalidURL, unauthorized, notFound
-    case incorrectPassword, userNotFound, httpError(Int)
-    case decodingError(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notConfigured:        return "No server configured — please pair first."
-        case .invalidURL:           return "Invalid URL."
-        case .unauthorized:         return "Session expired — please log in again."
-        case .notFound:             return "Not found."
-        case .incorrectPassword:    return "Incorrect password."
-        case .userNotFound:         return "User not found."
-        case .httpError(let c):     return "Server returned \(c)."
-        case .decodingError(let m): return "Response error: \(m)"
-        }
-    }
     // ── Favorites ─────────────────────────────────────────────────────────────
 
     func getFavorites() async throws -> FavoritesResponse {
@@ -712,4 +692,24 @@ enum APIError: LocalizedError {
             body: LyricsBody(trackhash: trackHash, filepath: filepath))
     }
 
+}
+
+// MARK: - Errors
+enum APIError: LocalizedError {
+    case notConfigured, invalidURL, unauthorized, notFound
+    case incorrectPassword, userNotFound, httpError(Int)
+    case decodingError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notConfigured:        return "No server configured — please pair first."
+        case .invalidURL:           return "Invalid URL."
+        case .unauthorized:         return "Session expired — please log in again."
+        case .notFound:             return "Not found."
+        case .incorrectPassword:    return "Incorrect password."
+        case .userNotFound:         return "User not found."
+        case .httpError(let c):     return "Server returned \(c)."
+        case .decodingError(let m): return "Response error: \(m)"
+        }
+    }
 }
