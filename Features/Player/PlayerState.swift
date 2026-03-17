@@ -143,7 +143,14 @@ final class PlayerState: ObservableObject {
             playbackState = .error; isBuffering = false; return
         }
 
-        let item = AVPlayerItem(asset: AVURLAsset(url: url))
+        // AVPlayer doesn't send custom headers automatically.
+        // Swing Music requires JWT auth on /file/ endpoints.
+        var assetOptions: [String: Any] = [:]
+        if let token = SwingAPIClient.cachedToken {
+            assetOptions[AVURLAssetHTTPHeaderFieldsKey] = ["Authorization": "Bearer \(token)"]
+        }
+        let asset = AVURLAsset(url: url, options: assetOptions)
+        let item  = AVPlayerItem(asset: asset)
         playerItem = item
         player = AVPlayer(playerItem: item)
         player?.automaticallyWaitsToMinimizeStalling = true
