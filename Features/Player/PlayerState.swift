@@ -147,7 +147,7 @@ final class PlayerState: ObservableObject {
         // Swing Music requires JWT auth on /file/ endpoints.
         var assetOptions: [String: Any] = [:]
         if let token = SwingAPIClient.cachedToken {
-            assetOptions[AVURLAssetHTTPHeaderFieldsKey] = ["Authorization": "Bearer \(token)"]
+            assetOptions["AVURLAssetHTTPHeaderFieldsKey"] = ["Authorization": "Bearer \(token)"]
         }
         let asset = AVURLAsset(url: url, options: assetOptions)
         let item  = AVPlayerItem(asset: asset)
