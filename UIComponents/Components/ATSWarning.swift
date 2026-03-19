@@ -15,7 +15,7 @@ struct ATSWarningSheet: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Insecure connection").font(SwingType.titleMedium)
-                    Text("HTTP — unencrypted").font(SwingType.labelSmall).foregroundStyle(.secondary)
+                    Text("HTTP").font(SwingType.labelSmall).foregroundStyle(.secondary)
                 }
             }
 
@@ -23,7 +23,7 @@ struct ATSWarningSheet: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 ATSWarningRow(icon: "eye.fill", color: .orange,
-                    text: "Your auth tokens travel unencrypted. Anyone on the same network can intercept them.")
+                    text: "Your data travels without TLS. Anyone on the same network can intercept them.")
                 ATSWarningRow(icon: "music.note.list", color: .orange,
                     text: "Your music library and listening history are visible to network observers.")
                 ATSWarningRow(icon: "wifi", color: .red,
