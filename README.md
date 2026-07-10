@@ -1,6 +1,8 @@
-# Swing Music Beta
+# Swing Music iOS Client
 
-A native iOS client for [Swing Music](https://github.com/mayfrost/SwingMusic) - a self-hosted music streaming server.
+A native iOS client for **[Swing Music](https://github.com/swingmx/swingmusic)** - a blazingly fast and beautiful, self-hosted music streaming server.
+
+> **Note**: This is an unofficial iOS client. The official Android client is available at [swingmx/android](https://github.com/swingmx/android).
 
 ## Features
 
@@ -10,9 +12,10 @@ A native iOS client for [Swing Music](https://github.com/mayfrost/SwingMusic) - 
 - **Playback**: Full playback controls with queue management
 - **Favorites**: Save favorite tracks, albums, and artists
 - **Playlists**: Create and manage custom playlists
-- **Recently Played**: Track your listening history
+- **Recently Played/Added**: Track your listening history and new additions
 - **Lyrics**: View synced lyrics from lrclib.net or your Swing Music server
 - **Theming**: Custom theme system with dark mode support
+- **Multi-user Support**: Connect to shared Swing Music servers
 
 ## Screenshots
 
@@ -53,11 +56,39 @@ swift build
 ### Connecting to Your Server
 
 1. Launch the app
-2. Enter your Swing Music server URL (e.g., `https://music.example.com`)
+2. Enter your Swing Music server URL (e.g., `https://music.example.com` or `http://localhost:1970`)
 3. Authenticate using one of the available methods:
    - **Password**: Enter username and password
    - **QR Code**: Scan the QR code from your Swing Music web interface (Settings > Pair device)
    - **Guest Access**: If enabled on your server, enter as a guest
+
+### Server Setup
+
+If you don't have a Swing Music server yet, you can set one up:
+
+**Quick Install (Linux/MacOS):**
+```bash
+curl -fsSL https://setup.swingmx.com | bash
+```
+
+**Docker Compose:**
+```yaml
+services:
+  swingmusic:
+    image: ghcr.io/swingmx/swingmusic:latest
+    container_name: swingmusic
+    ports:
+      - "1970:1970"
+    volumes:
+      - /path/to/music:/music
+      - /path/to/config:/config
+    environment:
+      - SWINGMUSIC_PORT=1970
+      - SWINGMUSIC_DEVICE_NAME=YourServerName
+    restart: unless-stopped
+```
+
+The server will be available at `http://localhost:1970` by default.
 
 ### Allowing Insecure HTTP (Development Only)
 
@@ -95,15 +126,16 @@ SwingMusicBeta/
 
 ## Server Compatibility
 
-This client is designed to work with [Swing Music](https://github.com/mayfrost/SwingMusic) server.
+This client is designed to work with **[Swing Music by swingmx](https://github.com/swingmx/swingmusic)**.
 
 ### Supported Server Versions
 
 - Swing Music (latest recommended)
+- Tested with swingmx/swingmusic server
 
 ### API Endpoints Used
 
-The client implements the full Swing Music API:
+The client implements the Swing Music API:
 - Authentication: `/auth/users`, `/auth/login`, `/auth/pair`, `/auth/refresh`, `/auth/logout`
 - Folders: `/folder`
 - Albums: `/album`, `/album/{hash}/tracks`, `/getall/albums`
@@ -121,23 +153,29 @@ The client implements the full Swing Music API:
 - All network requests use HTTPS by default
 - TLS certificates are accepted for self-signed certs (intentional for self-hosted servers)
 - User explicitly trusts the server by entering its URL
-- Sensitive data (tokens) stored in Keychain
-- App Transport Security (ATS) enforced with user override option
+- Sensitive data (tokens) stored securely
+- App Transport Security (ATS) enforced with user override option for local development
 
 ## Troubleshooting
 
 ### Connection Issues
 
-- **Cannot connect to server**: Verify the server is running and the URL is correct
+- **Cannot connect to server**: Verify the server is running and the URL is correct. Default port is 1970.
 - **SSL errors**: Use a valid certificate or enable "Allow insecure HTTP" for local development
 - **403 Forbidden (Cloudflare)**: Disable "Browser Integrity Check" in Cloudflare Tunnel settings
-- **404 errors**: Ensure you're using the correct server URL (just the host, no path)
+- **404 errors**: Ensure you're using the correct server URL (just the host, no path). Example: `https://music.example.com` not `https://music.example.com/api`
 
 ### Build Issues
 
 - **Missing dependencies**: Run `swift package resolve` to fetch dependencies
 - **Code signing errors**: Use `CODE_SIGNING_ALLOWED=NO` for development builds
 - **Xcode version**: Ensure you're using Xcode 15.0+ with Swift 5.9+
+
+### Common Server Issues
+
+- **Server not starting**: Check that port 1970 is available and not blocked by firewall
+- **Music not scanning**: Ensure your music directory is correctly configured in server settings
+- **Authentication failing**: Verify user credentials in your Swing Music server admin panel
 
 ## Contributing
 
@@ -159,12 +197,20 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## License
 
-This project is open source and available under the MIT License. See the LICENSE file for more details.
+This project is open source and available under the MIT License.
 
 ## Credits
 
-- **Swing Music Server**: [mayfrost/SwingMusic](https://github.com/mayfrost/SwingMusic)
+- **Swing Music Server**: [swingmx/swingmusic](https://github.com/swingmx/swingmusic) - The self-hosted music streaming server
+- **Official Android Client**: [swingmx/android](https://github.com/swingmx/android)
 - **Kingfisher**: Image loading library by [onevcat/Kingfisher](https://github.com/onevcat/Kingfisher)
+
+## Resources
+
+- [Swing Music Official Website](https://swingmx.com)
+- [Swing Music Documentation](https://swingmx.com/guide/introduction.html)
+- [Swing Music Community (Telegram)](https://t.me/+9n61PFcgKhozZDE0)
+- [r/SwingMusicApp on Reddit](https://www.reddit.com/r/SwingMusicApp)
 
 ## Contact
 
